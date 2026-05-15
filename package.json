@@ -1,0 +1,37 @@
+{
+  "name": "quantumscan",
+  "version": "1.0.0",
+  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase",
+  "keywords": [
+    "post-quantum",
+    "cryptography",
+    "pqc",
+    "security",
+    "scanner",
+    "nist",
+    "ml-kem",
+    "ml-dsa",
+    "quantum"
+  ],
+  "type": "module",
+  "bin": {
+    "quantumscan": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://quantumscan.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quantumscan-io/scanner-core"
+  },
+  "bugs": {
+    "url": "https://github.com/quantumscan-io/scanner-core/issues"
+  }
+}
