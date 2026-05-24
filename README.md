@@ -1,57 +1,75 @@
 # scanner-core
 
-> Open-source post-quantum cryptography (PQC) vulnerability scanner core.
-> MIT licensed · TypeScript · Reproducible builds · Privacy-first by design.
+> Open-source post-quantum cryptography (PQC) vulnerability scanner.
+> MIT licensed · JavaScript (ESM) · Privacy-first by design.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Active Development](https://img.shields.io/badge/status-active%20development-yellow.svg)](#roadmap)
+[![npm](https://img.shields.io/badge/npm-quantumscan-red.svg)](https://www.npmjs.com/package/quantumscan)
 [![DORA](https://img.shields.io/badge/compliance-DORA-purple.svg)](#compliance)
 [![NIS2](https://img.shields.io/badge/compliance-NIS2-purple.svg)](#compliance)
 [![NIST PQC](https://img.shields.io/badge/standard-NIST%20PQC-green.svg)](#compliance)
 
 ---
 
-## Quick Start
+## Quick start
+
+No install required. Run directly with npx:
 
 ```bash
-# Scan your project (no install, no login)
 npx quantumscan .
-
-# Scan a specific directory
 npx quantumscan ./src
-
-# JSON output for CI/CD pipelines
 npx quantumscan . --json
-
-# Exit 0 even with findings (non-blocking CI step)
 npx quantumscan . --no-fail
 ```
 
-For a full AI-powered analysis with migration guides, compliance mapping (DORA/NIS2), and shareable reports:
-→ **[quantumscan.io](https://quantumscan.io)** (free, no credit card)
+Example output:
+
+```
+QuantumScan v1.0.0  Post-Quantum Cryptography Scanner
+https://quantumscan.io
+──────────────────────────────────────────────────────────
+Path     /your/project
+Files    312 total · 87 scannable
+
+🔴 CRITICAL   3 findings
+  auth/session.js:14      MD5        `md5(`
+  lib/crypto.js:88        AES-ECB    `AES/ECB/`
+  config/tls.js:5         TLS 1.0    `TLSv1.0`
+
+🟠 HIGH        5 findings
+  auth/jwt.js:22          RSA        `RSA.generate(`
+  lib/keys.js:41          ECDSA      `ECDSA`
+  ...
+
+──────────────────────────────────────────────────────────
+Risk Score  68/100  High Risk
+
+Migrate to: ML-KEM (FIPS 203) · ML-DSA (FIPS 204)
+Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.
+
+Full AI analysis + migration guides → https://quantumscan.io
+```
 
 ## Add a badge to your repo
 
-Show your quantum-safety score in your README:
+Show your quantum-safety score directly in your README:
 
 ```markdown
-![QuantumScan](https://quantumscan.io/api/badge/YOUR_GITHUB_USERNAME/YOUR_REPO.svg)
+![QuantumScan](https://quantumscan.io/api/badge/YOUR_USERNAME/YOUR_REPO.svg)
 ```
 
 Example:
 ```markdown
-![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)
+[![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
 ```
 
-[![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
-
-Badges update automatically after each scan. Click the badge to open the full report.
+Badges update automatically after each scan and link to the full public report.
 
 ---
 
 ## What this is
 
-`scanner-core` is the open-source detection engine behind [QuantumScan](https://quantumscan.io) — a service that helps engineering teams identify cryptography vulnerable to quantum computing attacks across their codebases.
+`scanner-core` is the open-source detection engine behind [QuantumScan](https://quantumscan.io).
 
 The core scanner is released as MIT-licensed open source so that:
 
@@ -59,87 +77,61 @@ The core scanner is released as MIT-licensed open source so that:
 - **The scan can run client-side.** The same engine runs inside the user's GitHub Actions runner — source code never leaves the customer's infrastructure.
 - **The community can extend it.** Detection patterns, language support, and PQC mapping rules evolve with public review and contribution.
 
-The hosted SaaS, dashboard, dataset tooling, and customer-facing reports live in a separate (private) repository. This repository contains only the detection engine.
+The hosted SaaS, dashboard, and customer-facing reports live in a separate (private) repository. This repository contains only the detection engine.
 
 ## What it detects
 
-The scanner identifies cryptographic primitives that are either already broken or vulnerable to quantum-era attacks, across multiple programming languages.
-
 | Severity | Examples |
 |---|---|
-| **CRITICAL** | TLS < 1.2, SSLv3, MD5, SHA1 (standalone), DES, 3DES, RC4, RSA < 2048 |
+| **CRITICAL** | TLS < 1.2, SSLv3, MD5, SHA1, DES, 3DES, RC4, RSA < 2048 |
 | **HIGH** (quantum-vulnerable) | RSA, ECDSA, ECDH, DSA, DH, NIST P-256/384/521, secp curves, Curve25519, X25519, Ed25519 |
-| **MEDIUM** | AES-128 (Grover-weakened), OpenSSL < 1.1, deprecated crypto libraries |
+| **MEDIUM** | AES-128, OpenSSL < 1.1, CBC mode |
 | **LOW** | HMAC-SHA1, hardcoded keys in string literals |
 
-For each finding, the engine maps a recommended **NIST PQC standardized alternative**:
+For each finding, the engine maps a recommended NIST PQC standardized alternative:
 
 - **ML-KEM** (FIPS 203) — key encapsulation
 - **ML-DSA** (FIPS 204) — digital signatures
 - **SLH-DSA** (FIPS 205) — hash-based signature fallback
 
-## Languages supported (target)
+## Languages supported
 
 TypeScript / JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C / C++ · C# · Ruby · PHP
-
-## Architecture (privacy-first)
-
-The scanner is built around four layers, all of which are auditable:
-
-1. **Client-side execution.** The scanner runs inside the user's CI runner via GitHub Actions. Source code never leaves their infrastructure. Only structured findings (file path, line number, algorithm) are returned to the dashboard.
-2. **Memory-only fallback.** When server-side processing is unavoidable for a public repo demo, the code is held in RAM, scanned, and the container is destroyed. No disk write, no logs, no caches.
-3. **Reproducible builds.** Every release has a SHA-256 hash. Anyone can compile from source and verify that the binary matches the one running in production.
-4. **Audit log per access.** Every internal access generates a public audit entry visible to the customer.
-
-A more detailed architectural document is published on the QuantumScan landing page under "Privacy by architecture".
 
 ## Roadmap
 
 - [x] **v1.0** — Core regex engine, 50+ patterns, multi-language support, `npx quantumscan` CLI — **LIVE**
-- [x] **SaaS dashboard** — full scan history, findings, drift detection, DORA/NIS2 PDF reports — **LIVE at quantumscan.io**
+- [x] **SaaS** — full dashboard, drift detection, DORA/NIS2 PDF reports — **LIVE at quantumscan.io**
 - [x] **GitHub PR Bot** — automatic PQC scan on every pull request — **submitted to GitHub Marketplace**
 - [x] **Multi-platform** — GitHub + GitLab + Bitbucket + ZIP upload
 - [x] **CBOM export** — CycloneDX 1.7 format
 - [x] **BYOK** — Bring Your Own Anthropic/OpenAI/Gemini key
 - [ ] **v1.1** — GitHub Actions client-side scan (code never leaves your infra)
 - [ ] **v1.2** — SBOM publishing + reproducible builds
-- [ ] **v1.3** — Leaderboard API (public dataset of OSS crypto inventory)
+- [ ] **v1.3** — DORA / NIS2 / ISO 27001 compliance mapping per finding + LATAM (LGPD, BACEN)
 
-Detailed milestones and active issues live in the [GitHub Projects board](https://github.com/orgs/quantumscan-io/projects).
+Contributions wanted:
+
+- Language patterns: Go (`crypto/rsa`, `x/crypto`), Java (Bouncy Castle, `javax.crypto`), .NET (`System.Security.Cryptography`)
+- LATAM compliance mappings: BACEN 4.658, LGPD Art. 46, SFC Colombia, CNBV Mexico
+
+Open an issue with label `language-patterns` or `compliance-mapping` to start.
 
 ## Compliance
 
-The scanner output is designed to be auditor-ready for the following frameworks:
-
-- **DORA** (EU Digital Operational Resilience Act) — Article 50 cryptographic risk management
-- **NIS2** (EU Network and Information Systems Directive)
-- **NIST SP 800-208** / **NIST PQC standards** (FIPS 203/204/205)
-- **BSI TR-02102** (German Federal Office for Information Security)
-- **ISO 27001** Annex A.10 (cryptographic controls)
-- **SOC 2** CC6.7 (encryption of data in transit and at rest)
-
-## Sponsorship & funding
-
-QuantumScan is in **Phase 1**: free for all design partners while we build a public LATAM crypto-inventory dataset. Each scan costs roughly **US$0.20** in Anthropic API fees.
-
-If you find this tool useful and would like to help cover the API costs that keep scans free for the community, you can sponsor the project:
-
-- **Ko-fi:** [ko-fi.com/quantumscan](https://ko-fi.com/quantumscan) — one-time or recurring support
-- **Open Collective:** [opencollective.com/quantumscan](https://opencollective.com/quantumscan) *(pending fiscal host approval)*
-- **GitHub Sponsors:** [github.com/sponsors/quantumscan-io](https://github.com/sponsors/quantumscan-io) *(coming soon)*
-
-Every cent received is tracked publicly and converted to API credits within seven days. Monthly transparency reports are published on [quantumscan.io](https://quantumscan.io) showing: received from sponsors / converted to API credits / scans funded for the community.
+- **DORA** — Article 50 cryptographic risk management
+- **NIS2** — EU Network and Information Systems Directive
+- **NIST PQC** — FIPS 203/204/205
+- **ISO 27001** — Annex A.10 (cryptographic controls)
+- **SOC 2** — CC6.7
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome. The project is in early development — the most useful contributions right now are:
+Contributions, issues, and feature requests are welcome. Most useful right now:
 
 - Reporting false positives or missed patterns
 - Adding language-specific detection rules
-- Improving the PQC alternative mapping for your stack
 - Reviewing the threat model and architecture
-
-A `CONTRIBUTING.md` and code of conduct will be published alongside v0.1.
 
 ## License
 
@@ -148,6 +140,6 @@ A `CONTRIBUTING.md` and code of conduct will be published alongside v0.1.
 ## Links
 
 - **Website:** [quantumscan.io](https://quantumscan.io)
+- **Ko-fi:** [ko-fi.com/quantumscan](https://ko-fi.com/quantumscan)
 - **LinkedIn:** [linkedin.com/company/quantumscan](https://linkedin.com/company/quantumscan)
 - **Org:** [github.com/quantumscan-io](https://github.com/quantumscan-io)
-- **Privacy architecture:** detailed on the QuantumScan landing page
