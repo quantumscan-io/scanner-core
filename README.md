@@ -11,6 +11,44 @@
 
 ---
 
+## Quick Start
+
+```bash
+# Scan your project (no install, no login)
+npx quantumscan .
+
+# Scan a specific directory
+npx quantumscan ./src
+
+# JSON output for CI/CD pipelines
+npx quantumscan . --json
+
+# Exit 0 even with findings (non-blocking CI step)
+npx quantumscan . --no-fail
+```
+
+For a full AI-powered analysis with migration guides, compliance mapping (DORA/NIS2), and shareable reports:
+→ **[quantumscan.io](https://quantumscan.io)** (free, no credit card)
+
+## Add a badge to your repo
+
+Show your quantum-safety score in your README:
+
+```markdown
+![QuantumScan](https://quantumscan.io/api/badge/YOUR_GITHUB_USERNAME/YOUR_REPO.svg)
+```
+
+Example:
+```markdown
+![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)
+```
+
+[![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
+
+Badges update automatically after each scan. Click the badge to open the full report.
+
+---
+
 ## What this is
 
 `scanner-core` is the open-source detection engine behind [QuantumScan](https://quantumscan.io) — a service that helps engineering teams identify cryptography vulnerable to quantum computing attacks across their codebases.
@@ -57,14 +95,15 @@ A more detailed architectural document is published on the QuantumScan landing p
 
 ## Roadmap
 
-The project is in early active development. Initial release planned for **Q2 2026**.
-
-- [ ] **v0.1** — Core regex engine, 50+ patterns, TS/JS support, CLI runner
-- [ ] **v0.2** — Multi-language support (Python, Go, Java, Rust)
-- [ ] **v0.3** — GitHub Actions integration (client-side scan, GitHub-native UX)
-- [ ] **v0.4** — CycloneDX 1.7 CBOM output (audit-ready format)
-- [ ] **v0.5** — DORA / NIS2 / ISO 27001 compliance mapping
-- [ ] **v1.0** — Reproducible builds, SBOM publishing, security review
+- [x] **v1.0** — Core regex engine, 50+ patterns, multi-language support, `npx quantumscan` CLI — **LIVE**
+- [x] **SaaS dashboard** — full scan history, findings, drift detection, DORA/NIS2 PDF reports — **LIVE at quantumscan.io**
+- [x] **GitHub PR Bot** — automatic PQC scan on every pull request — **submitted to GitHub Marketplace**
+- [x] **Multi-platform** — GitHub + GitLab + Bitbucket + ZIP upload
+- [x] **CBOM export** — CycloneDX 1.7 format
+- [x] **BYOK** — Bring Your Own Anthropic/OpenAI/Gemini key
+- [ ] **v1.1** — GitHub Actions client-side scan (code never leaves your infra)
+- [ ] **v1.2** — SBOM publishing + reproducible builds
+- [ ] **v1.3** — Leaderboard API (public dataset of OSS crypto inventory)
 
 Detailed milestones and active issues live in the [GitHub Projects board](https://github.com/orgs/quantumscan-io/projects).
 
@@ -85,7 +124,8 @@ QuantumScan is in **Phase 1**: free for all design partners while we build a pub
 
 If you find this tool useful and would like to help cover the API costs that keep scans free for the community, you can sponsor the project:
 
-- **Open Collective:** [opencollective.com/quantumscan](https://opencollective.com/quantumscan) *(application pending fiscal host approval)*
+- **Ko-fi:** [ko-fi.com/quantumscan](https://ko-fi.com/quantumscan) — one-time or recurring support
+- **Open Collective:** [opencollective.com/quantumscan](https://opencollective.com/quantumscan) *(pending fiscal host approval)*
 - **GitHub Sponsors:** [github.com/sponsors/quantumscan-io](https://github.com/sponsors/quantumscan-io) *(coming soon)*
 
 Every cent received is tracked publicly and converted to API credits within seven days. Monthly transparency reports are published on [quantumscan.io](https://quantumscan.io) showing: received from sponsors / converted to API credits / scans funded for the community.
