@@ -3,6 +3,7 @@
 > Open-source post-quantum cryptography (PQC) vulnerability scanner.
 > MIT licensed · JavaScript (ESM) · Privacy-first by design.
 
+[![CI](https://github.com/quantumscan-io/scanner-core/actions/workflows/ci.yml/badge.svg)](https://github.com/quantumscan-io/scanner-core/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/badge/npm-quantumscan-red.svg)](https://www.npmjs.com/package/quantumscan)
 [![DORA](https://img.shields.io/badge/compliance-DORA-purple.svg)](#compliance)
