@@ -64,8 +64,6 @@ Example:
 [![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
 ```
 
-Badges update automatically after each scan and link to the full public report.
-
 ---
 
 ## What this is
@@ -97,7 +95,7 @@ For each finding, the engine maps a recommended NIST PQC standardized alternativ
 
 ## Languages supported
 
-TypeScript / JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C / C++ · C# · Ruby · PHP
+TypeScript / JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C / C++ · C# / .NET · Ruby · PHP
 
 ## Roadmap
 
@@ -107,16 +105,23 @@ TypeScript / JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C 
 - [x] **Multi-platform** — GitHub + GitLab + Bitbucket + ZIP upload
 - [x] **CBOM export** — CycloneDX 1.7 format
 - [x] **BYOK** — Bring Your Own Anthropic/OpenAI/Gemini key
+- [x] **.NET / C# detection** — `System.Security.Cryptography` + BouncyCastle.NET — community contribution
 - [ ] **v1.1** — GitHub Actions client-side scan (code never leaves your infra)
 - [ ] **v1.2** — SBOM publishing + reproducible builds
 - [ ] **v1.3** — DORA / NIS2 / ISO 27001 compliance mapping per finding + LATAM (LGPD, BACEN)
 
 Contributions wanted:
 
-- Language patterns: Go (`crypto/rsa`, `x/crypto`), Java (Bouncy Castle, `javax.crypto`), .NET (`System.Security.Cryptography`)
+- Language patterns: Go (`crypto/rsa`, `x/crypto`), Java (Bouncy Castle, `javax.crypto`)
 - LATAM compliance mappings: BACEN 4.658, LGPD Art. 46, SFC Colombia, CNBV Mexico
 
 Open an issue with label `language-patterns` or `compliance-mapping` to start.
+
+## Contributors
+
+Thanks to everyone who has contributed code or patterns to scanner-core:
+
+- [@ChisaTocris](https://github.com/ChisaTocris) — .NET / C# detection patterns + BouncyCastle.NET
 
 ## Compliance
 
