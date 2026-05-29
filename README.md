@@ -9,6 +9,9 @@
 [![DORA](https://img.shields.io/badge/compliance-DORA-purple.svg)](#compliance)
 [![NIS2](https://img.shields.io/badge/compliance-NIS2-purple.svg)](#compliance)
 [![NIST PQC](https://img.shields.io/badge/standard-NIST%20PQC-green.svg)](#compliance)
+[![Stars](https://img.shields.io/github/stars/quantumscan-io/scanner-core?style=social)](https://github.com/quantumscan-io/scanner-core/stargazers)
+
+> **Help us reach 1,000 ⭐** — every star helps scanner-core get listed in security awesome-lists and reach more developers before Q-day.
 
 ---
 
@@ -63,6 +66,29 @@ Example:
 ```markdown
 [![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
 ```
+
+---
+
+## Real-world scans — 2026-05-29 batch
+
+Scanned 30 public repos today across GitHub, GitLab, Bitbucket, and ZIP uploads:
+
+| Repository | Platform | Risk Score | Key Finding |
+|---|---|---|---|
+| [tlsfuzzer/python-ecdsa](https://quantumscan.io/en/share/b8debd2c-8af8-4052-ab24-134fe4b348a8) | GitHub | **95/100** | 171 ECDSA patterns · 9 critical SHA-1 usages |
+| [bitcoin/bitcoin](https://quantumscan.io/en/share/12c86aea-2652-455f-ae23-958cd92fc714) | GitHub | **89/100** | secp256k1 ECDSA in every transaction |
+| [bcgit/bc-java](https://quantumscan.io/en/share/17ba30c8-d148-4f89-bcdd-8fbdc9fee588) | GitHub | **78/100** | #1 Java crypto library |
+| [gnutls/gnutls](https://quantumscan.io/en/share/ef777d8a-eeae-4870-bf04-c4688e4e7804) | GitLab | **78/100** | Linux TLS stack |
+| [hashicorp/vault](https://quantumscan.io/en/share/6184cf79-9dfa-4556-b524-e4789382bced) | GitHub | **73/100** | Enterprise secrets manager |
+| [jpadilla/pyjwt](https://quantumscan.io/en/share/740a40df-fd8e-4700-befb-a422b3b1e69e) | GitHub | **72/100** | 36M+ PyPI downloads/month |
+| [oscrypto](https://quantumscan.io/en/share/065d3505-e0ca-4e8b-9fcd-99a672e2f4fa) | ZIP | **72/100** | OS crypto bindings |
+| [paragonie/halite](https://quantumscan.io/en/share/0477e2a0-6a41-45e7-9c9b-37fc711b1295) | GitHub | 72/100 | PHP high-level crypto |
+| [curl/curl](https://quantumscan.io/en/share/8ac0abfb-e26d-4988-843b-5a6a0e5a776a) | GitHub | 12/100 | Mostly clean |
+| spring-projects/spring-security | GitHub | 8/100 | Low exposure |
+| inkscape/inkscape | GitLab | 8/100 | Low exposure |
+| libvirt/libvirt · dolfin (Bitbucket) | GitLab/BB | 0/100 | Clean |
+
+→ [Full leaderboard: quantumscan.io/leaderboard](https://quantumscan.io/leaderboard)
 
 ---
 
