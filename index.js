@@ -72,6 +72,17 @@ const PATTERNS = [
   { id: "blowfish",     name: "Blowfish",          sev: "medium",   re: /\bBlowfish\b|bf_cbc|BF_KEY\b|AES\.MODE_BF/i },
   { id: "math-random",  name: "Math.random in crypto",sev: "medium",re: /Math\.random\(\)\s*.*(?:key|token|nonce|salt|iv|secret)|(?:key|token|nonce|salt|iv|secret).*Math\.random\(\)/i, alt: "crypto.getRandomValues()" },
   { id: "openssl-old",  name: "OpenSSL < 3.x",     sev: "medium",   re: /OpenSSL\s+1\.[01]\.|libssl\.so\.1\.|openssl-1\.[01]\./i },
+  // BLOCKCHAIN — Web3 / DeFi / Wallet libraries (secp256k1 / Ed25519)
+  { id: "ethers-wallet",       name: "ethers.js Wallet (secp256k1)",       sev: "high", re: /new\s+ethers\.Wallet\s*\(|Wallet\.createRandom\s*\(|Wallet\.fromMnemonic\s*\(|Wallet\.fromPhrase\s*\(/i,                            alt: "Monitor Ethereum PQC roadmap (EIP-7786)" },
+  { id: "web3-accounts",       name: "web3.js / viem accounts (secp256k1)",sev: "high", re: /web3\.eth\.accounts\.|accounts\.create\s*\(|privateKeyToAccount\s*\(|createWalletClient\s*\(|generatePrivateKey\s*\(\)/i,             alt: "Monitor Ethereum PQC roadmap" },
+  { id: "bitcoinjs-ecpair",    name: "bitcoinjs-lib ECPair (secp256k1)",   sev: "high", re: /ECPair\.fromPrivateKey\s*\(|ECPair\.makeRandom\s*\(|ECPair\.fromWIF\s*\(|bitcoin\.ECPair/i,                                           alt: "Follow Bitcoin PQC proposals (BIP-360 draft)" },
+  { id: "solana-keypair",      name: "Solana Keypair (Ed25519)",           sev: "high", re: /Keypair\.generate\s*\(|Keypair\.fromSecretKey\s*\(|Keypair\.fromSeed\s*\(|web3\.Keypair\b/i,                                          alt: "Monitor Solana PQC roadmap" },
+  { id: "solidity-ecrecover",  name: "Solidity ecrecover (secp256k1)",     sev: "high", re: /\becrecover\s*\(|ECDSA\.recover\s*\(|ECDSA\.tryRecover\s*\(/i,                                                                        alt: "Monitor EVM PQC precompile proposals" },
+  { id: "bip32-hd-wallet",     name: "BIP32/BIP39 HD Wallet derivation",  sev: "high", re: /BIP32Factory\s*\(|hdkey\.fromMasterSeed\s*\(|HDKey\.fromMasterSeed\s*\(|EthereumHDKey|derivePath\s*\(\s*["']m\//i,                   alt: "No PQC BIP32 standard yet — monitor BIP proposals" },
+  { id: "eth-account-python",  name: "eth-account / web3.py (secp256k1)", sev: "high", re: /from\s+eth_account\s+import|Account\.create\s*\(|Account\.from_key\s*\(|w3\.eth\.account\./i,                                        alt: "Monitor ethereum/py-evm PQC roadmap" },
+  { id: "coincurve-secp256k1", name: "coincurve / python-bitcoin",        sev: "high", re: /import\s+coincurve\b|coincurve\.(?:PublicKey|PrivateKey)|from\s+bitcoinlib\s+import.*(?:Key|sign)/i,                                  alt: "ML-DSA (CRYSTALS-Dilithium)" },
+  { id: "rust-secp256k1-crate",name: "Rust secp256k1 / k256 crate",      sev: "high", re: /use\s+secp256k1::|use\s+k256::|Secp256k1::new\s*\(|SecretKey::from_slice\s*\(|SigningKey::from_bytes\s*\(/i,                          alt: "ML-DSA via pqcrypto-dilithium crate" },
+  { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey|TronWeb\.address\.fromPrivateKey/i,                alt: "Monitor TRON PQC roadmap" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",     sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i },
   { id: "crc32",        name: "CRC32 for integrity",sev: "low",     re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" },
@@ -84,6 +95,7 @@ const SCANNABLE_EXTS = new Set([
   ".go", ".java", ".rb", ".cs", ".rs",
   ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp",
   ".php", ".kt", ".swift", ".scala", ".ex", ".exs",
+  ".sol",
 ]);
 
 const SKIP_DIRS = new Set([
