@@ -28,27 +28,15 @@ jobs:
 
       - name: Verify JSON output
         run: |
-          node index.js . --json --no-fail > /tmp/out.json
-          node -e "
-            const d = require('/tmp/out.json');
-            if (!d.version || !Array.isArray(d.findings)) { console.error('invalid JSON'); process.exit(1); }
-            console.log('JSON OK:', d.findings.length, 'findings, score:', d.summary.riskScore);
-          "
+          node index.js . --json --no-fail > /tmp/scan.json
+          node -e "var d=JSON.parse(require('fs').readFileSync('/tmp/scan.json','utf8'));if(!d.version||!Array.isArray(d.findings)){process.exit(1);}console.log('JSON OK:',d.findings.length,'findings');"
 
       - name: Verify SARIF output
         run: |
-          node index.js . --sarif --no-fail > /tmp/out.sarif
-          node -e "
-            const d = require('/tmp/out.sarif');
-            if (d.version !== '2.1.0' || !d.runs || !d.runs[0].results) { console.error('invalid SARIF'); process.exit(1); }
-            console.log('SARIF OK:', d.runs[0].results.length, 'results,', d.runs[0].tool.driver.rules.length, 'rules');
-          "
+          node index.js . --sarif --no-fail > /tmp/scan.sarif
+          node -e "var d=JSON.parse(require('fs').readFileSync('/tmp/scan.sarif','utf8'));if(d.version!=='2.1.0'||!d.runs){process.exit(1);}console.log('SARIF OK:',d.runs[0].results.length,'results');"
 
-      - name: Verify --no-deps skips dependency scan
+      - name: Verify --no-deps flag
         run: |
           node index.js . --json --no-deps --no-fail > /tmp/nodeps.json
-          node -e "
-            const d = require('/tmp/nodeps.json');
-            if (d.summary.dependencies !== 0) { console.error('expected 0 deps, got', d.summary.dependencies); process.exit(1); }
-            console.log('--no-deps OK');
-          "
+          node -e "var d=JSON.parse(require('fs').readFileSync('/tmp/nodeps.json','utf8'));if(d.summary.dependencies!==0){process.exit(1);}console.log('--no-deps OK');"
