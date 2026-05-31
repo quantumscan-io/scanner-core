@@ -308,11 +308,63 @@ function scanPomXml(filePath, rootDir) {
   return findings;
 }
 
+// pyproject.toml (modern Python — PEP 517/518)
+function scanPyprojectToml(filePath, rootDir) {
+  const findings = [];
+  let content;
+  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  const relPath = relative(rootDir, filePath).replace(/\\/g, "/");
+  const lines = content.split("\n");
+  let inDeps = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (/^\s*dependencies\s*=/.test(raw)) { inDeps = true; continue; }
+    if (inDeps && /^\s*\]/.test(raw)) { inDeps = false; continue; }
+    if (inDeps && raw.trim() && !raw.trim().startsWith("#")) {
+      const m = raw.match(/["']([A-Za-z0-9][A-Za-z0-9._-]*)/);
+      if (m) {
+        const pkg = m[1].replace(/_/g, "-").toLowerCase();
+        for (const d of matchDep(pkg, "python")) {
+          findings.push({ file: relPath, line: i + 1, id: `dep/${d.pkg}`, name: `Dep: ${m[1]}`, sev: d.sev, match: raw.trim().substring(0, 60), alt: d.alt, reason: d.reason, type: "dependency" });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
+// setup.py (legacy Python — install_requires=[...])
+function scanSetupPy(filePath, rootDir) {
+  const findings = [];
+  let content;
+  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  const relPath = relative(rootDir, filePath).replace(/\\/g, "/");
+  const lines = content.split("\n");
+  let inRequires = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (/install_requires\s*=\s*\[/.test(raw)) { inRequires = true; }
+    if (inRequires && /^\s*\]/.test(raw) && !raw.includes("[")) { inRequires = false; continue; }
+    if (inRequires) {
+      const m = raw.match(/["']([A-Za-z0-9][A-Za-z0-9._-]*)/);
+      if (m) {
+        const pkg = m[1].replace(/_/g, "-").toLowerCase();
+        for (const d of matchDep(pkg, "python")) {
+          findings.push({ file: relPath, line: i + 1, id: `dep/${d.pkg}`, name: `Dep: ${m[1]}`, sev: d.sev, match: raw.trim().substring(0, 60), alt: d.alt, reason: d.reason, type: "dependency" });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 function scanDependencies(rootDir) {
   const allFindings = [];
   const manifests = [
     { name: "package.json",      fn: scanPackageJson },
     { name: "requirements.txt",  fn: scanRequirementsTxt },
+    { name: "pyproject.toml",    fn: scanPyprojectToml },
+    { name: "setup.py",          fn: scanSetupPy },
     { name: "go.mod",            fn: scanGoMod },
     { name: "Cargo.toml",        fn: scanCargoToml },
     { name: "pom.xml",           fn: scanPomXml },
