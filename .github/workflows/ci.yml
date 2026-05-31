@@ -14,20 +14,41 @@ jobs:
         node-version: [18.x, 20.x, 22.x]
     steps:
       - uses: actions/checkout@v4
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Verify CLI runs
+
+      - name: Verify CLI version
         run: node index.js --version
+
       - name: Scan own repo (human output)
         run: node index.js . --no-fail
-      - name: Verify JSON output is valid
-        run: node index.js . --json --no-fail | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); if(!d.version||!d.findings)throw new Error('invalid JSON'); console.log('JSON OK: '+d.findings.length+' findings')"
-      - name: Verify SARIF output is valid
-        run: node index.js . --sarif --no-fail | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); if(d.version!='2.1.0'||!d.runs)throw new Error('invalid SARIF'); console.log('SARIF OK: '+d.runs[0].results.length+' results')"
+
+      - name: Verify JSON output
+        run: |
+          node index.js . --json --no-fail > /tmp/out.json
+          node -e "
+            const d = require('/tmp/out.json');
+            if (!d.version || !Array.isArray(d.findings)) { console.error('invalid JSON'); process.exit(1); }
+            console.log('JSON OK:', d.findings.length, 'findings, score:', d.summary.riskScore);
+          "
+
+      - name: Verify SARIF output
+        run: |
+          node index.js . --sarif --no-fail > /tmp/out.sarif
+          node -e "
+            const d = require('/tmp/out.sarif');
+            if (d.version !== '2.1.0' || !d.runs || !d.runs[0].results) { console.error('invalid SARIF'); process.exit(1); }
+            console.log('SARIF OK:', d.runs[0].results.length, 'results,', d.runs[0].tool.driver.rules.length, 'rules');
+          "
+
       - name: Verify --no-deps skips dependency scan
         run: |
-          COUNT=$(node index.js . --json --no-deps --no-fail | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.stdout.write(String(d.summary.dependencies))")
-          if [ "$COUNT" != "0" ]; then echo "FAIL: expected 0 dep findings, got $COUNT"; exit 1; fi
-          echo "--no-deps OK"
+          node index.js . --json --no-deps --no-fail > /tmp/nodeps.json
+          node -e "
+            const d = require('/tmp/nodeps.json');
+            if (d.summary.dependencies !== 0) { console.error('expected 0 deps, got', d.summary.dependencies); process.exit(1); }
+            console.log('--no-deps OK');
+          "
