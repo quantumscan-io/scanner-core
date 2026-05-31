@@ -491,7 +491,6 @@ function printSarif(findings, targetDir) {
           region: { startLine: f.line },
         },
       }],
-      ...(f.alt ? { fixes: [{ description: { text: `Migrate to: ${f.alt}` } }] } : {}),
     };
   });
 
