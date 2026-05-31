@@ -1,7 +1,7 @@
 {
   "name": "quantumscan",
-  "version": "1.1.0",
-  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase (TypeScript, Python, Go, Java, C#/.NET, and more)",
+  "version": "1.0.1",
+  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase",
   "keywords": [
     "post-quantum",
     "cryptography",
@@ -12,10 +12,17 @@
     "ml-kem",
     "ml-dsa",
     "quantum",
-    "dotnet",
-    "csharp",
     "dora",
-    "nis2"
+    "nis2",
+    "compliance",
+    "cbom",
+    "cyclonedx",
+    "cli",
+    "vulnerability",
+    "static-analysis",
+    "github",
+    "gitlab",
+    "bitbucket"
   ],
   "type": "module",
   "bin": {

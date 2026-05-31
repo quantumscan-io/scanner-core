@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync, statSync } from "fs";
+import { execSync } from "child_process";
 import { join, extname, relative, resolve } from "path";
 import { argv, exit } from "process";
 
@@ -245,6 +246,7 @@ Usage: npx quantumscan [path] [options]
 
 Options:
   --json             Output results as JSON (for CI/CD pipelines)
+  --badge            Print README badge markdown after scan
   --no-fail          Exit 0 even when findings are found (default: exit 1)
   --version          Show version
   --help             Show this help
@@ -252,6 +254,7 @@ Options:
 Examples:
   npx quantumscan .
   npx quantumscan ./src --json
+  npx quantumscan . --badge
   npx quantumscan /path/to/project --json | jq '.summary'
 
 Exit codes:
@@ -263,15 +266,33 @@ Full cloud analysis with AI migration guides:
   ${APP_URL}
 `;
 
+function detectRepoSlug(dir) {
+  try {
+    const remote = execSync("git remote get-url origin", { cwd: dir, stdio: ["pipe","pipe","pipe"] })
+      .toString().trim();
+    const m = remote.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/i);
+    return m ? m[1].toLowerCase() : null;
+  } catch { return null; }
+}
+
+function printBadge(slug, score) {
+  const badgeUrl = `https://quantumscan.io/api/badge/${slug}.svg`;
+  const scanUrl  = `https://quantumscan.io/en/scan`;
+  console.log(`\n${C.cyan}README badge (add to your README.md):${C.reset}`);
+  console.log(`${C.bold}[![QuantumScan](${badgeUrl})](${scanUrl})${C.reset}`);
+  console.log(`${C.dim}(score shown reflects last cloud scan at quantumscan.io)${C.reset}\n`);
+}
+
 function main() {
   const args = argv.slice(2);
 
   if (args.includes("--help") || args.includes("-h")) { console.log(HELP); exit(0); }
   if (args.includes("--version") || args.includes("-v")) { console.log(VERSION); exit(0); }
 
-  const jsonMode = args.includes("--json");
-  const noFail   = args.includes("--no-fail");
-  const pathArg  = args.find(a => !a.startsWith("-")) ?? ".";
+  const jsonMode  = args.includes("--json");
+  const badgeMode = args.includes("--badge");
+  const noFail    = args.includes("--no-fail");
+  const pathArg   = args.find(a => !a.startsWith("-")) ?? ".";
 
   let targetDir;
   try {
@@ -301,6 +322,14 @@ function main() {
     printJson(findings, allFiles.length, scannableFiles.length, targetDir, score);
   } else {
     printResults(findings, allFiles.length, scannableFiles.length, targetDir, score);
+    if (badgeMode) {
+      const slug = detectRepoSlug(targetDir);
+      if (slug) {
+        printBadge(slug, score);
+      } else {
+        console.log(`\n${C.dim}--badge: could not detect GitHub remote. Run inside a git repo or add a remote.${C.reset}\n`);
+      }
+    }
   }
 
   exit(noFail || findings.length === 0 ? 0 : 1);
