@@ -23,7 +23,9 @@ No install required. Run directly with npx:
 npx quantumscan .               # scan current directory
 npx quantumscan ./src           # scan specific path
 npx quantumscan . --json        # JSON output for CI/CD
+npx quantumscan . --sarif       # SARIF 2.1.0 output (GitHub Security tab)
 npx quantumscan . --badge       # print README badge markdown
+npx quantumscan . --no-deps     # skip dependency scanning
 npx quantumscan . --no-fail     # exit 0 even with findings
 ```
 
@@ -54,6 +56,72 @@ Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.
 
 Full AI analysis + migration guides → https://quantumscan.io
 ```
+
+## Suppressing false positives
+
+Add `// quantumscan-ignore` (or `# quantumscan-ignore` for Python/Ruby) to the end of a line, or on the line before it, to suppress that specific finding:
+
+```python
+# This constant is only used in validation tests — not a real crypto call
+REJECTED_ALGO = "RS256"  # quantumscan-ignore
+
+# Or suppress the next line:
+# quantumscan-ignore
+legacy_hash = hashlib.sha1(nonce)  # test vector, no security impact
+```
+
+Works in all supported languages. One suppression per line — does not disable the whole file.
+
+---
+
+## Dependency scanning
+
+scanner-core automatically scans your package manifests for dependencies that use quantum-vulnerable cryptography:
+
+| Manifest | Ecosystem |
+|---|---|
+| `package.json` | npm |
+| `requirements.txt` | Python / pip |
+| `go.mod` | Go modules |
+| `Cargo.toml` | Rust / crates.io |
+| `pom.xml` | Java / Maven |
+
+Example output:
+```
+📦 DEPENDENCIES  3 vulnerable package(s)
+  package.json    elliptic     Elliptic curve crypto (secp256k1, P-256)
+    → ml-kem / ml-dsa
+  requirements.txt  ecdsa==0.19.0  Pure ECDSA — named after the broken algo
+    → pqcrypto (dilithium)
+```
+
+To skip dependency scanning: `npx quantumscan . --no-deps`
+
+---
+
+## SARIF output (GitHub Security tab)
+
+Use `--sarif` to output [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) format — the standard consumed by GitHub Security, GitLab SAST, VS Code, and most DevSecOps pipelines:
+
+```bash
+npx quantumscan . --sarif > results.sarif
+```
+
+**GitHub Actions integration** — upload to Security tab:
+
+```yaml
+- name: Scan for quantum-vulnerable crypto
+  run: npx quantumscan . --sarif --no-fail > results.sarif
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+```
+
+After the workflow runs, findings appear under **Security → Code scanning** in your repository.
+
+---
 
 ## Add a badge to your repo
 
