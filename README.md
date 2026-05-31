@@ -20,10 +20,11 @@
 No install required. Run directly with npx:
 
 ```bash
-npx quantumscan .
-npx quantumscan ./src
-npx quantumscan . --json
-npx quantumscan . --no-fail
+npx quantumscan .               # scan current directory
+npx quantumscan ./src           # scan specific path
+npx quantumscan . --json        # JSON output for CI/CD
+npx quantumscan . --badge       # print README badge markdown
+npx quantumscan . --no-fail     # exit 0 even with findings
 ```
 
 Example output:
@@ -56,15 +57,24 @@ Full AI analysis + migration guides → https://quantumscan.io
 
 ## Add a badge to your repo
 
-Show your quantum-safety score directly in your README:
+Show your quantum-safety score directly in your README. The badge auto-updates every time you run a cloud scan at [quantumscan.io](https://quantumscan.io).
 
-```markdown
-![QuantumScan](https://quantumscan.io/api/badge/YOUR_USERNAME/YOUR_REPO.svg)
+**Option 1 — Auto-generate from CLI (detects your GitHub remote):**
+
+```bash
+npx quantumscan . --badge
 ```
 
-Example:
+Outputs:
+```
+README badge (add to your README.md):
+[![QuantumScan](https://quantumscan.io/api/badge/owner/repo.svg)](https://quantumscan.io/en/scan)
+```
+
+**Option 2 — Manually:**
+
 ```markdown
-[![QuantumScan](https://quantumscan.io/api/badge/openssl/openssl.svg)](https://quantumscan.io)
+[![QuantumScan](https://quantumscan.io/api/badge/YOUR_USERNAME/YOUR_REPO.svg)](https://quantumscan.io)
 ```
 
 ---
