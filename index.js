@@ -76,6 +76,15 @@ const PATTERNS = [
   { id: "coincurve-secp256k1", name: "coincurve / python-bitcoin",        sev: "high", re: /import\s+coincurve\b|coincurve\.(?:PublicKey|PrivateKey)|from\s+bitcoinlib\s+import.*(?:Key|sign)/i, alt: "ML-DSA (CRYSTALS-Dilithium)" },
   { id: "rust-secp256k1-crate",name: "Rust secp256k1 / k256 crate",      sev: "high", re: /use\s+secp256k1::|use\s+k256::|Secp256k1::new\s*\(|SecretKey::from_slice\s*\(|SigningKey::from_bytes\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" },
   { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey/i, alt: "Monitor TRON PQC roadmap" },
+  // HIGH — Java JCA / SSH library false-negative fixes (2026-06-04)
+  { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" },
+  { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" },
+  { id: "java-ssh-mina-jsch",  name: "Apache MINA SSHD / JSch client",        sev: "high", re: /SshClient\.setUpDefaultClient\s*\(|new\s+JSch\s*\(|\.setKeyPairProvider\s*\(|SshServer\.setUpDefaultServer\s*\(/i, alt: "Monitor OpenSSH PQC KEX: mlkem768x25519-sha256" },
+  { id: "csharp-ssh-net",      name: "SSH.NET SshClient / PrivateKeyFile",     sev: "high", re: /new\s+SshClient\s*\(|new\s+SftpClient\s*\(|new\s+PrivateKeyFile\s*\(|new\s+RsaKey\s*\(/i, alt: "Monitor OpenSSH PQC roadmap" },
+  { id: "csharp-rsa-cng",      name: "C# RSACng / ECDsaCng (CNG APIs)",        sev: "high", re: /new\s+RSACng\s*\(|new\s+ECDsaCng\s*\(|new\s+DSACng\s*\(|AsymmetricAlgorithm\.Create\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 via NIST FIPS 203/204" },
+  { id: "go-crypto-rsa",       name: "Go stdlib RSA/ECDSA keygen",             sev: "high", re: /rsa\.GenerateKey\s*\(|ecdsa\.GenerateKey\s*\(|rsa\.EncryptPKCS1v15\s*\(|rsa\.SignPKCS1v15\s*\(|rsa\.DecryptPKCS1v15\s*\(/i, alt: "ML-KEM-768 via golang.org/x/crypto/mlkem (FIPS 203)" },
+  { id: "rust-ring",           name: "Rust ring RSA/ECDSA signatures",         sev: "high", re: /ring::signature::(?:RSA_PKCS1|ECDSA_P(?:256|384))|RsaKeyPair::from_pkcs8\s*\(|EcdsaKeyPair::from_pkcs8\s*\(/i, alt: "pqcrypto-dilithium or ml-dsa crate" },
+  { id: "python-paramiko-key", name: "Paramiko RSA/ECDSA key operations",      sev: "high", re: /paramiko\.RSAKey\b|paramiko\.ECDSAKey\b|RSAKey\.generate\s*\(|ECDSAKey\.generate\s*\(|paramiko\.DSSKey\b/i, alt: "Monitor OpenSSH PQC roadmap" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i },
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" },
@@ -109,6 +118,9 @@ const VULNERABLE_DEPS = [
   { pkg: "coincurve",        eco: "python", sev: "high",     reason: "secp256k1 Python bindings",                alt: "pqcrypto (dilithium)" },
   // Java / pom.xml (groupId prefix match)
   { pkg: "org.bouncycastle", eco: "maven",  sev: "high",     reason: "RSA/ECDSA/DSA — use bcpqc for PQC",        alt: "Upgrade to bcpqc jar (Bouncy Castle PQC)" },
+  { pkg: "org.apache.sshd", eco: "maven",  sev: "high",     reason: "Apache MINA SSHD — RSA/ECDSA host keys & auth", alt: "Monitor Apache MINA PQC roadmap; prefer mlkem768x25519 KEX" },
+  { pkg: "com.jcraft",      eco: "maven",  sev: "high",     reason: "JSch — RSA/ECDSA SSH transport",               alt: "Monitor OpenSSH PQC roadmap" },
+  { pkg: "net.schmizz",     eco: "maven",  sev: "high",     reason: "sshj — RSA/ECDSA SSH transport",               alt: "Monitor PQC KEX support in sshj" },
   { pkg: "io.jsonwebtoken",  eco: "maven",  sev: "medium",   reason: "RS256/ES256 JWT",                          alt: "Use HS256 algorithms only" },
   { pkg: "com.auth0:java-jwt",eco: "maven", sev: "medium",   reason: "RSA/ECDSA JWT support",                    alt: "Use HMAC algorithms only" },
   // Go / go.mod
@@ -121,6 +133,7 @@ const VULNERABLE_DEPS = [
   { pkg: "p256",             eco: "rust",   sev: "high",     reason: "p256 (NIST P-256) crate",                  alt: "pqcrypto-dilithium" },
   { pkg: "ed25519-dalek",    eco: "rust",   sev: "high",     reason: "Ed25519 (Shor-vulnerable)",                alt: "ML-DSA via pqcrypto-dilithium" },
   { pkg: "x25519-dalek",     eco: "rust",   sev: "high",     reason: "X25519 key exchange (Shor-vulnerable)",    alt: "ML-KEM via pqcrypto-kyber" },
+  { pkg: "ring",             eco: "rust",   sev: "high",     reason: "ring crate — RSA/ECDSA/ECDH operations",   alt: "pqcrypto-kyber for KEM; pqcrypto-dilithium for signatures" },
 ];
 
 const SCANNABLE_EXTS = new Set([
