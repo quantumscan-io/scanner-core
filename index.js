@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -85,6 +85,17 @@ const PATTERNS = [
   { id: "go-crypto-rsa",       name: "Go stdlib RSA/ECDSA keygen",             sev: "high", re: /rsa\.GenerateKey\s*\(|ecdsa\.GenerateKey\s*\(|rsa\.EncryptPKCS1v15\s*\(|rsa\.SignPKCS1v15\s*\(|rsa\.DecryptPKCS1v15\s*\(/i, alt: "ML-KEM-768 via golang.org/x/crypto/mlkem (FIPS 203)" },
   { id: "rust-ring",           name: "Rust ring RSA/ECDSA signatures",         sev: "high", re: /ring::signature::(?:RSA_PKCS1|ECDSA_P(?:256|384))|RsaKeyPair::from_pkcs8\s*\(|EcdsaKeyPair::from_pkcs8\s*\(/i, alt: "pqcrypto-dilithium or ml-dsa crate" },
   { id: "python-paramiko-key", name: "Paramiko RSA/ECDSA key operations",      sev: "high", re: /paramiko\.RSAKey\b|paramiko\.ECDSAKey\b|RSAKey\.generate\s*\(|ECDSAKey\.generate\s*\(|paramiko\.DSSKey\b/i, alt: "Monitor OpenSSH PQC roadmap" },
+  // HIGH — crypto implementation patterns (library internals — 2026-06-08 v1.3.0)
+  { id: "openssl-evp-cipher",  name: "OpenSSL EVP cipher impl",         sev: "high", re: /EVP_(?:Encrypt|Decrypt|Cipher)Init(?:_ex2?)?\s*\(/i,                                                                                     alt: "OpenSSL 3.x oqs-provider for AES-GCM + ML-KEM" },
+  { id: "openssl-rsa-gen",     name: "OpenSSL RSA keygen impl",          sev: "high", re: /RSA_generate_key(?:_ex)?\s*\(|EVP_PKEY_CTX_new_id\s*\(\s*EVP_PKEY_RSA/i,                                                                 alt: "ML-KEM-768 (NIST FIPS 203)" },
+  { id: "openssl-ec-gen",      name: "OpenSSL EC keygen impl",           sev: "high", re: /EC_KEY_new_by_curve_name\s*\(|EC_GROUP_new_by_curve_name\s*\(/i,                                                                          alt: "ML-KEM or ML-DSA via oqs-provider" },
+  { id: "openssl-bn-prime",    name: "OpenSSL BN prime (RSA impl)",      sev: "high", re: /BN_generate_prime(?:_ex2?)?\s*\(/i,                                                                                                       alt: "ML-KEM-768 (NIST FIPS 203)" },
+  { id: "openssl-dsa-gen",     name: "OpenSSL DSA keygen impl",          sev: "high", re: /DSA_generate_key\s*\(|DSA_generate_parameters(?:_ex)?\s*\(/i,                                                                             alt: "ML-DSA-65 (NIST FIPS 204)" },
+  { id: "java-jca-ec-gen",     name: "Java JCA EC KeyPairGenerator",     sev: "high", re: /KeyPairGenerator\.getInstance\s*\(\s*["'](?:EC|ECDH|ECDSA)["']/i,                                                                        alt: "ML-KEM-768 or ML-DSA-65 via Bouncy Castle PQC" },
+  { id: "java-jca-spi",        name: "Java JCA provider SPI impl",       sev: "high", re: /extends\s+(?:KeyPairGeneratorSpi|SignatureSpi|CipherSpi|MessageDigestSpi|KeyAgreementSpi)\b|Security\.addProvider\s*\(/i,                 alt: "Implement PQC via Bouncy Castle bcpqc jar" },
+  { id: "java-jca-keyagree",   name: "Java JCA KeyAgreement ECDH/DH",   sev: "high", re: /KeyAgreement\.getInstance\s*\(\s*["'](?:ECDH|DH|ECMQV)["']/i,                                                                            alt: "ML-KEM-768 (NIST FIPS 203)" },
+  { id: "node-crypto-keygen",  name: "Node.js crypto.generateKeyPair",   sev: "high", re: /crypto\.generateKeyPair(?:Sync)?\s*\(\s*["'](?:rsa|ec|dsa|ed25519|x25519)["']/i,                                                         alt: "await Web Crypto + liboqs-js for ML-KEM/ML-DSA" },
+  { id: "node-crypto-ecdh",    name: "Node.js crypto.createECDH",        sev: "high", re: /crypto\.createECDH\s*\(/i,                                                                                                                alt: "ML-KEM-768 via liboqs-js" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i },
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" },
@@ -150,6 +161,15 @@ const SKIP_DIRS = new Set([
   ".gradle", ".idea", ".vscode", "venv", ".venv", ".tox",
   "tmp", "temp", ".turbo",
 ]);
+
+// ── Crypto library detector ───────────────────────────────────────────────────
+const CRYPTO_LIB_HINTS = /\b(crypto|cipher|ssl|tls|ssh|rsa|ecdsa|ecdh|dsa|dh|pgp|gpg|tink|botan|openssl|libsodium|nacl|bcrypt|argon|signal|noise|kyber|dilithium|falcon|sphincs|pqcrypto|liboqs|mina.?sshd|jsch|paramiko)\b/i;
+
+function mayBeCryptoLib(targetDir, allFiles) {
+  if (CRYPTO_LIB_HINTS.test(basename(targetDir))) return true;
+  const cHeaders = allFiles.filter(f => /\.(c|h|cpp|hpp)$/.test(f)).length;
+  return cHeaders >= 5;
+}
 
 // ── File walking ──────────────────────────────────────────────────────────────
 function walkDir(dir, files = []) {
@@ -426,13 +446,18 @@ function visLen(str) { return str.replace(/\x1b\[[0-9;]*m/g, "").length; }
 function padEnd(str, len) { return str + " ".repeat(Math.max(0, len - visLen(str))); }
 function hr() { return "─".repeat(58); }
 
-function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount) {
+function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib) {
   console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
   console.log(`${C.cyan}${APP_URL}${C.reset}`);
   console.log(hr());
   console.log(`Path     ${C.bold}${targetDir}${C.reset}`);
   console.log(`Files    ${C.gray}${totalFiles} total · ${scannableCount} scannable${C.reset}`);
   if (depCount > 0) console.log(`Deps     ${C.gray}${depCount} vulnerable package(s) found${C.reset}`);
+  if (isCryptoLib || score <= 20) {
+    console.log(`${C.yellow}Coverage ${C.reset}${C.dim}score ≤ 20 or this looks like a crypto library — patterns cover API usage,`);
+    console.log(`         not JCA/OpenSSL/C implementation internals. Score may undercount.`);
+    console.log(`         Run full cloud analysis at ${APP_URL} for deeper coverage.${C.reset}`);
+  }
   console.log("");
 
   if (findings.length === 0) {
@@ -490,7 +515,7 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
 }
 
 // ── JSON output ───────────────────────────────────────────────────────────────
-function printJson(findings, totalFiles, scannableCount, targetDir, score) {
+function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib) {
   const summary = { riskScore: score };
   for (const sev of SEV_ORDER) summary[sev] = findings.filter(f => f.sev === sev).length;
   summary.dependencies = findings.filter(f => f.type === "dependency").length;
@@ -498,6 +523,9 @@ function printJson(findings, totalFiles, scannableCount, targetDir, score) {
     version: VERSION,
     path: targetDir,
     stats: { totalFiles, scannableFiles: scannableCount },
+    coverage: (isCryptoLib || score <= 20)
+      ? "partial — crypto library or low score: implementation-level patterns may not be fully covered"
+      : "standard",
     summary,
     findings: findings.map(f => ({
       file: f.file, line: f.line,
@@ -588,11 +616,19 @@ function detectRepoSlug(dir) {
   } catch { return null; }
 }
 
-function printBadge(slug) {
+function printBadge(slug, dir) {
   const badgeUrl = `https://quantumscan.io/api/badge/${slug}.svg`;
   const scanUrl  = `https://quantumscan.io/en/scan`;
-  console.log(`\n${C.cyan}README badge (add to your README.md):${C.reset}`);
-  console.log(`${C.bold}[![QuantumScan](${badgeUrl})](${scanUrl})${C.reset}`);
+  const hasRst   = existsSync(join(dir, "README.rst")) || existsSync(join(dir, "readme.rst")) || existsSync(join(dir, "README.RST"));
+  if (hasRst) {
+    console.log(`\n${C.cyan}README badge (RST syntax for README.rst):${C.reset}`);
+    console.log(`${C.bold}.. image:: ${badgeUrl}${C.reset}`);
+    console.log(`${C.bold}   :target: ${scanUrl}${C.reset}`);
+    console.log(`${C.bold}   :alt: QuantumScan${C.reset}`);
+  } else {
+    console.log(`\n${C.cyan}README badge (add to your README.md):${C.reset}`);
+    console.log(`${C.bold}[![QuantumScan](${badgeUrl})](${scanUrl})${C.reset}`);
+  }
   console.log(`${C.dim}(score reflects last cloud scan at quantumscan.io)${C.reset}\n`);
 }
 
@@ -670,16 +706,17 @@ function main() {
   const depFindings     = noDeps ? [] : scanDependencies(targetDir);
   const allFindings     = [...codeFindings, ...depFindings];
   const score           = calcScore(allFindings);
+  const isCryptoLib     = mayBeCryptoLib(targetDir, allFiles);
 
   if (sarifMode) {
     printSarif(allFindings, targetDir);
   } else if (jsonMode) {
-    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score);
+    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib);
   } else {
-    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length);
+    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib);
     if (badgeMode) {
       const slug = detectRepoSlug(targetDir);
-      if (slug) printBadge(slug);
+      if (slug) printBadge(slug, targetDir);
       else console.log(`\n${C.dim}--badge: could not detect GitHub remote.${C.reset}\n`);
     }
   }
@@ -688,3 +725,4 @@ function main() {
 }
 
 main();
+
