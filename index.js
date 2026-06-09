@@ -1,10 +1,10 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -30,121 +30,130 @@ function sevColor(sev) {
 // ── Crypto patterns ───────────────────────────────────────────────────────────
 const PATTERNS = [
   // CRITICAL — broken / deprecated
-  { id: "ssl-v2-v3",    name: "SSLv2 / SSLv3",           sev: "critical", re: /SSLv[23]|SSL_OP_NO_SSLv[23]|PROTOCOL_SSLv[23]/i },
-  { id: "tls-old",      name: "TLS 1.0 / 1.1",           sev: "critical", re: /TLSv1(?:\.0|\.1)?\b|PROTOCOL_TLSv1(?:_1)?\b|ssl\.TLSv1\b|SslProtocols\.(?:Tls|Tls11)\b/i },
-  { id: "md5",          name: "MD5",                      sev: "critical", re: /\bMD5\b|md5\(|hashlib\.md5|MessageDigest\.getInstance\s*\(\s*["']MD5["']\)|new\s+MD5(?:CryptoServiceProvider)?\s*\(|MD5CryptoServiceProvider\b/i, alt: "SHA3-256 or SHA-256" },
-  { id: "sha1",         name: "SHA-1",                    sev: "critical", re: /\bSHA1\b|\bsha1\s*\(|hashlib\.sha1\b|MessageDigest\.getInstance\s*\(\s*["']SHA-?1["']\)|new\s+SHA1CryptoServiceProvider\s*\(|SHA1CryptoServiceProvider\b/i, alt: "SHA-256" },
-  { id: "des",          name: "DES",                      sev: "critical", re: /\bDES\b(?!C?SHA|\s*ede)|DESKeySpec|DES\.new\b|DESCryptoServiceProvider\b|Cipher\.getInstance\s*\(\s*["']DES[/"']/i },
-  { id: "3des",         name: "3DES / TripleDES",         sev: "critical", re: /3DES|TripleDES|DESede|DES_EDE|des3_cbc|des-ede3/i },
-  { id: "rc4",          name: "RC4",                      sev: "critical", re: /\bRC4\b|ARCFOUR|ARC4\b|arcfour|Cipher\.getInstance\s*\(\s*["']RC4/i },
-  { id: "ecb",          name: "AES-ECB (no IV)",          sev: "critical", re: /\/ECB\/|AES\.MODE_ECB|CipherMode\.ECB\b|Cipher\.getInstance\s*\(\s*["']AES["']|["']AES\/ECB/i, alt: "AES-GCM or ChaCha20-Poly1305" },
-  { id: "rc2",          name: "RC2",                      sev: "critical", re: /\bRC2\b|RC2KeySpec|RC2ParameterSpec/i },
-  { id: "nullcipher",   name: "NullCipher",               sev: "critical", re: /NullCipher|javax\.crypto\.NullCipher/i },
+  { id: "ssl-v2-v3",    name: "SSLv2 / SSLv3",           sev: "critical", re: /SSLv[23]|SSL_OP_NO_SSLv[23]|PROTOCOL_SSLv[23]/i }, // quantumscan-ignore
+  { id: "tls-old",      name: "TLS 1.0 / 1.1",           sev: "critical", re: /TLSv1(?:\.0|\.1)?\b|PROTOCOL_TLSv1(?:_1)?\b|ssl\.TLSv1\b|SslProtocols\.(?:Tls|Tls11)\b/i }, // quantumscan-ignore
+  { id: "md5",          name: "MD5",                      sev: "critical", re: /\bMD5\b|md5\(|hashlib\.md5|MessageDigest\.getInstance\s*\(\s*["']MD5["']\)|new\s+MD5(?:CryptoServiceProvider)?\s*\(|MD5CryptoServiceProvider\b/i, alt: "SHA3-256 or SHA-256" }, // quantumscan-ignore
+  { id: "sha1",         name: "SHA-1",                    sev: "critical", re: /\bSHA1\b|\bsha1\s*\(|hashlib\.sha1\b|MessageDigest\.getInstance\s*\(\s*["']SHA-?1["']\)|new\s+SHA1CryptoServiceProvider\s*\(|SHA1CryptoServiceProvider\b/i, alt: "SHA-256" }, // quantumscan-ignore
+  { id: "des",          name: "DES",                      sev: "critical", re: /\bDES\b(?!C?SHA|\s*ede)|DESKeySpec|DES\.new\b|DESCryptoServiceProvider\b|Cipher\.getInstance\s*\(\s*["']DES[/"']/i }, // quantumscan-ignore
+  { id: "3des",         name: "3DES / TripleDES",         sev: "critical", re: /3DES|TripleDES|DESede|DES_EDE|des3_cbc|des-ede3/i }, // quantumscan-ignore
+  { id: "rc4",          name: "RC4",                      sev: "critical", re: /\bRC4\b|ARCFOUR|ARC4\b|arcfour|Cipher\.getInstance\s*\(\s*["']RC4/i }, // quantumscan-ignore
+  { id: "ecb",          name: "AES-ECB (no IV)",          sev: "critical", re: /\/ECB\/|AES\.MODE_ECB|CipherMode\.ECB\b|Cipher\.getInstance\s*\(\s*["']AES["']|["']AES\/ECB/i, alt: "AES-GCM or ChaCha20-Poly1305" }, // quantumscan-ignore
+  { id: "rc2",          name: "RC2",                      sev: "critical", re: /\bRC2\b|RC2KeySpec|RC2ParameterSpec/i }, // quantumscan-ignore
+  { id: "nullcipher",   name: "NullCipher",               sev: "critical", re: /NullCipher|javax\.crypto\.NullCipher/i }, // quantumscan-ignore
   // HIGH — quantum-vulnerable (Shor's algorithm)
-  { id: "rsa",          name: "RSA",                      sev: "high",     re: /RSA(?:Key(?:Pair)?|PublicKey|PrivateKey|Generator|Encryptor|Decryptor|Signature|CryptoServiceProvider)?(?:\s*\(|\s*\.\s*(?:generate|new|create|load|import))\b|RSACryptoServiceProvider\b|generateRSA|Rsa(?:Private|Public|Key|KeyPairGenerator)|PKCS1_(?:v1_5|OAEP)|import_rsa_key|openssl_pkey_new/i, alt: "ML-KEM (CRYSTALS-Kyber)" },
-  { id: "rsa-small",    name: "RSA key ≤2048 bits",       sev: "critical", re: /rsa.*\b(512|768|1024|1536|2048)\b|\bkey(?:_size|Size|Bits)\s*[=:]\s*(512|768|1024|1536|2048)\b|generateKeyPair\s*\(\s*(512|768|1024|1536|2048)/i },
-  { id: "ecdsa",        name: "ECDSA",                    sev: "high",     re: /\bECDSA\b|ECDsa\.Create\s*\(|ECDSASignature|ecdsa_(?:sign|verify)|ES(?:256|384|512)\b/i, alt: "ML-DSA (CRYSTALS-Dilithium)" },
-  { id: "ecdh",         name: "ECDH / ECDHE",             sev: "high",     re: /\bECDH\b|\bECDHE\b|ECKeyAgreement|ecdh_(?:generate|compute)|TLS_ECDHE/i, alt: "ML-KEM (CRYSTALS-Kyber)" },
-  { id: "dsa",          name: "DSA",                      sev: "high",     re: /\bDSA\b(?!SHA|_KEY_SIZE|Version)|DSA\.Create\s*\(|DSAKeySpec|DSAPublicKey|DSAPrivateKey|DSASignature|DSACryptoServiceProvider\b|DsaKeyPairGenerator\b/i, alt: "ML-DSA (CRYSTALS-Dilithium)" },
-  { id: "dh",           name: "Diffie-Hellman",           sev: "high",     re: /\bDHKey\b|\bDiffieHellman\b|DHKeyExchange|DHParameterSpec|DH\.new\b/i, alt: "ML-KEM (CRYSTALS-Kyber)" },
-  { id: "p256",         name: "NIST P-256",               sev: "high",     re: /\bP-?256\b|prime256v1|secp256r1|NamedCurve\.P_?256/i, alt: "ML-KEM or ML-DSA" },
-  { id: "p384",         name: "NIST P-384",               sev: "high",     re: /\bP-?384\b|secp384r1|NamedCurve\.P_?384/i, alt: "ML-KEM or ML-DSA" },
-  { id: "p521",         name: "NIST P-521",               sev: "high",     re: /\bP-?521\b|secp521r1|NamedCurve\.P_?521/i },
-  { id: "secp256k1",    name: "secp256k1",                sev: "high",     re: /secp256k1|SECP256K1/i },
-  { id: "ed25519",      name: "Ed25519 / EdDSA",          sev: "high",     re: /\bEd25519\b|Edwards25519|EdDSA\b/i, alt: "ML-DSA or SLH-DSA" },
-  { id: "x25519",       name: "X25519 / Curve25519",      sev: "high",     re: /\bX25519\b|Curve25519|curve25519/i, alt: "ML-KEM (CRYSTALS-Kyber)" },
-  { id: "jwt-alg",      name: "JWT quantum-vuln alg",     sev: "high",     re: /algorithm["'\s:]+["'](RS256|RS384|RS512|ES256|ES384|ES512|PS256|PS384|PS512|EdDSA)["']/i, alt: "HS256 or post-quantum signature" },
-  { id: "pkcs1",        name: "PKCS#1 (RSA)",             sev: "high",     re: /PKCS1\b|pkcs#1|BEGIN RSA PRIVATE KEY|RSAPrivateKey_format/i },
-  { id: "ecc",          name: "ECC generic",              sev: "high",     re: /EllipticCurve|ECGenParameterSpec|ECPublicKey|ECPrivateKey|ECKeyPairGenerator\b|EcKey\b|ec\.generate_private_key/i },
-  { id: "x509-gen",     name: "X.509 cert generation",    sev: "high",     re: /X509(?:Certificate)?Builder.*sign|createSelfSigned|makeCertificate|X509\.new\b/i },
+  { id: "rsa",          name: "RSA",                      sev: "high",     re: /RSA(?:Key(?:Pair)?|PublicKey|PrivateKey|Generator|Encryptor|Decryptor|Signature|CryptoServiceProvider)?(?:\s*\(|\s*\.\s*(?:generate|new|create|load|import))\b|RSACryptoServiceProvider\b|generateRSA|Rsa(?:Private|Public|Key|KeyPairGenerator)|PKCS1_(?:v1_5|OAEP)|import_rsa_key|openssl_pkey_new/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
+  { id: "rsa-small",    name: "RSA key ≤2048 bits",       sev: "critical", re: /rsa.*\b(512|768|1024|1536|2048)\b|\bkey(?:_size|Size|Bits)\s*[=:]\s*(512|768|1024|1536|2048)\b|generateKeyPair\s*\(\s*(512|768|1024|1536|2048)/i }, // quantumscan-ignore
+  { id: "ecdsa",        name: "ECDSA",                    sev: "high",     re: /\bECDSA\b|ECDsa\.Create\s*\(|ECDSASignature|ecdsa_(?:sign|verify)|ES(?:256|384|512)\b/i, alt: "ML-DSA (CRYSTALS-Dilithium)" }, // quantumscan-ignore
+  { id: "ecdh",         name: "ECDH / ECDHE",             sev: "high",     re: /\bECDH\b|\bECDHE\b|ECKeyAgreement|ecdh_(?:generate|compute)|TLS_ECDHE/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
+  { id: "dsa",          name: "DSA",                      sev: "high",     re: /\bDSA\b(?!SHA|_KEY_SIZE|Version)|DSA\.Create\s*\(|DSAKeySpec|DSAPublicKey|DSAPrivateKey|DSASignature|DSACryptoServiceProvider\b|DsaKeyPairGenerator\b/i, alt: "ML-DSA (CRYSTALS-Dilithium)" }, // quantumscan-ignore
+  { id: "dh",           name: "Diffie-Hellman",           sev: "high",     re: /\bDHKey\b|\bDiffieHellman\b|DHKeyExchange|DHParameterSpec|DH\.new\b/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
+  { id: "p256",         name: "NIST P-256",               sev: "high",     re: /\bP-?256\b|prime256v1|secp256r1|NamedCurve\.P_?256/i, alt: "ML-KEM or ML-DSA" }, // quantumscan-ignore
+  { id: "p384",         name: "NIST P-384",               sev: "high",     re: /\bP-?384\b|secp384r1|NamedCurve\.P_?384/i, alt: "ML-KEM or ML-DSA" }, // quantumscan-ignore
+  { id: "p521",         name: "NIST P-521",               sev: "high",     re: /\bP-?521\b|secp521r1|NamedCurve\.P_?521/i }, // quantumscan-ignore
+  { id: "secp256k1",    name: "secp256k1",                sev: "high",     re: /secp256k1|SECP256K1/i }, // quantumscan-ignore
+  { id: "ed25519",      name: "Ed25519 / EdDSA",          sev: "high",     re: /\bEd25519\b|Edwards25519|EdDSA\b/i, alt: "ML-DSA or SLH-DSA" }, // quantumscan-ignore
+  { id: "x25519",       name: "X25519 / Curve25519",      sev: "high",     re: /\bX25519\b|Curve25519|curve25519/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
+  { id: "jwt-alg",      name: "JWT quantum-vuln alg",     sev: "high",     re: /algorithm["'\s:]+["'](RS256|RS384|RS512|ES256|ES384|ES512|PS256|PS384|PS512|EdDSA)["']/i, alt: "HS256 or post-quantum signature" }, // quantumscan-ignore
+  { id: "pkcs1",        name: "PKCS#1 (RSA)",             sev: "high",     re: /PKCS1\b|pkcs#1|BEGIN RSA PRIVATE KEY|RSAPrivateKey_format/i }, // quantumscan-ignore
+  { id: "ecc",          name: "ECC generic",              sev: "high",     re: /EllipticCurve|ECGenParameterSpec|ECPublicKey|ECPrivateKey|ECKeyPairGenerator\b|EcKey\b|ec\.generate_private_key/i }, // quantumscan-ignore
+  { id: "x509-gen",     name: "X.509 cert generation",    sev: "high",     re: /X509(?:Certificate)?Builder.*sign|createSelfSigned|makeCertificate|X509\.new\b/i }, // quantumscan-ignore
   // MEDIUM — weak or concerning
-  { id: "aes128",       name: "AES-128",                  sev: "medium",   re: /AES[-_]?128|AES\b.*\b128\b|KeySize\s*\(\s*128\s*\)|aes_128/i, alt: "AES-256" },
-  { id: "cbc",          name: "CBC mode",                 sev: "medium",   re: /\/CBC\/|AES\.MODE_CBC|aes_cbc\b|MODE_CBC/i, alt: "AES-GCM or ChaCha20-Poly1305" },
-  { id: "hmacsha1",     name: "HMAC-SHA1",                sev: "medium",   re: /HMAC[-_]?SHA1|HmacSHA1|hmac_sha1|Mac\.getInstance\s*\(\s*["']HmacSHA1["']\)/i, alt: "HMAC-SHA256" },
-  { id: "pbkdf2-low",   name: "PBKDF2 low iterations",    sev: "medium",   re: /PBKDF2.*\b(100|500|1000|5000|10000)\b|iterationCount\s*[=:]\s*\d{1,4}\b/i, alt: "Argon2id" },
-  { id: "blowfish",     name: "Blowfish",                 sev: "medium",   re: /\bBlowfish\b|bf_cbc|BF_KEY\b|AES\.MODE_BF/i },
-  { id: "math-random",  name: "Math.random in crypto",    sev: "medium",   re: /Math\.random\(\)\s*.*(?:key|token|nonce|salt|iv|secret)|(?:key|token|nonce|salt|iv|secret).*Math\.random\(\)/i, alt: "crypto.getRandomValues()" },
-  { id: "openssl-old",  name: "OpenSSL < 3.x",            sev: "medium",   re: /OpenSSL\s+1\.[01]\.|libssl\.so\.1\.|openssl-1\.[01]\./i },
+  { id: "aes128",       name: "AES-128",                  sev: "medium",   re: /AES[-_]?128|AES\b.*\b128\b|KeySize\s*\(\s*128\s*\)|aes_128/i, alt: "AES-256" }, // quantumscan-ignore
+  { id: "cbc",          name: "CBC mode",                 sev: "medium",   re: /\/CBC\/|AES\.MODE_CBC|aes_cbc\b|MODE_CBC/i, alt: "AES-GCM or ChaCha20-Poly1305" }, // quantumscan-ignore
+  { id: "hmacsha1",     name: "HMAC-SHA1",                sev: "medium",   re: /HMAC[-_]?SHA1|HmacSHA1|hmac_sha1|Mac\.getInstance\s*\(\s*["']HmacSHA1["']\)/i, alt: "HMAC-SHA256" }, // quantumscan-ignore
+  { id: "pbkdf2-low",   name: "PBKDF2 low iterations",    sev: "medium",   re: /PBKDF2.*\b(100|500|1000|5000|10000)\b|iterationCount\s*[=:]\s*\d{1,4}\b/i, alt: "Argon2id" }, // quantumscan-ignore
+  { id: "blowfish",     name: "Blowfish",                 sev: "medium",   re: /\bBlowfish\b|bf_cbc|BF_KEY\b|AES\.MODE_BF/i }, // quantumscan-ignore
+  { id: "math-random",  name: "Math.random in crypto",    sev: "medium",   re: /Math\.random\(\)\s*.*(?:key|token|nonce|salt|iv|secret)|(?:key|token|nonce|salt|iv|secret).*Math\.random\(\)/i, alt: "crypto.getRandomValues()" }, // quantumscan-ignore
+  { id: "openssl-old",  name: "OpenSSL < 3.x",            sev: "medium",   re: /OpenSSL\s+1\.[01]\.|libssl\.so\.1\.|openssl-1\.[01]\./i }, // quantumscan-ignore
   // BLOCKCHAIN
-  { id: "ethers-wallet",       name: "ethers.js Wallet (secp256k1)",       sev: "high", re: /new\s+ethers\.Wallet\s*\(|Wallet\.createRandom\s*\(|Wallet\.fromMnemonic\s*\(|Wallet\.fromPhrase\s*\(/i, alt: "Monitor Ethereum PQC roadmap (EIP-7786)" },
-  { id: "web3-accounts",       name: "web3.js / viem accounts (secp256k1)",sev: "high", re: /web3\.eth\.accounts\.|accounts\.create\s*\(|privateKeyToAccount\s*\(|createWalletClient\s*\(|generatePrivateKey\s*\(\)/i, alt: "Monitor Ethereum PQC roadmap" },
-  { id: "bitcoinjs-ecpair",    name: "bitcoinjs-lib ECPair (secp256k1)",   sev: "high", re: /ECPair\.fromPrivateKey\s*\(|ECPair\.makeRandom\s*\(|ECPair\.fromWIF\s*\(|bitcoin\.ECPair/i, alt: "Follow Bitcoin PQC proposals (BIP-360 draft)" },
-  { id: "solana-keypair",      name: "Solana Keypair (Ed25519)",           sev: "high", re: /Keypair\.generate\s*\(|Keypair\.fromSecretKey\s*\(|Keypair\.fromSeed\s*\(|web3\.Keypair\b/i, alt: "Monitor Solana PQC roadmap" },
-  { id: "solidity-ecrecover",  name: "Solidity ecrecover (secp256k1)",     sev: "high", re: /\becrecover\s*\(|ECDSA\.recover\s*\(|ECDSA\.tryRecover\s*\(/i, alt: "Monitor EVM PQC precompile proposals" },
-  { id: "bip32-hd-wallet",     name: "BIP32/BIP39 HD Wallet derivation",  sev: "high", re: /BIP32Factory\s*\(|hdkey\.fromMasterSeed\s*\(|HDKey\.fromMasterSeed\s*\(|EthereumHDKey|derivePath\s*\(\s*["']m\//i, alt: "No PQC BIP32 standard yet — monitor BIP proposals" },
-  { id: "eth-account-python",  name: "eth-account / web3.py (secp256k1)", sev: "high", re: /from\s+eth_account\s+import|Account\.create\s*\(|Account\.from_key\s*\(|w3\.eth\.account\./i, alt: "Monitor ethereum/py-evm PQC roadmap" },
-  { id: "coincurve-secp256k1", name: "coincurve / python-bitcoin",        sev: "high", re: /import\s+coincurve\b|coincurve\.(?:PublicKey|PrivateKey)|from\s+bitcoinlib\s+import.*(?:Key|sign)/i, alt: "ML-DSA (CRYSTALS-Dilithium)" },
-  { id: "rust-secp256k1-crate",name: "Rust secp256k1 / k256 crate",      sev: "high", re: /use\s+secp256k1::|use\s+k256::|Secp256k1::new\s*\(|SecretKey::from_slice\s*\(|SigningKey::from_bytes\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" },
-  { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey/i, alt: "Monitor TRON PQC roadmap" },
+  { id: "ethers-wallet",       name: "ethers.js Wallet (secp256k1)",       sev: "high", re: /new\s+ethers\.Wallet\s*\(|Wallet\.createRandom\s*\(|Wallet\.fromMnemonic\s*\(|Wallet\.fromPhrase\s*\(/i, alt: "Monitor Ethereum PQC roadmap (EIP-7786)" }, // quantumscan-ignore
+  { id: "web3-accounts",       name: "web3.js / viem accounts (secp256k1)",sev: "high", re: /web3\.eth\.accounts\.|accounts\.create\s*\(|privateKeyToAccount\s*\(|createWalletClient\s*\(|generatePrivateKey\s*\(\)/i, alt: "Monitor Ethereum PQC roadmap" }, // quantumscan-ignore
+  { id: "bitcoinjs-ecpair",    name: "bitcoinjs-lib ECPair (secp256k1)",   sev: "high", re: /ECPair\.fromPrivateKey\s*\(|ECPair\.makeRandom\s*\(|ECPair\.fromWIF\s*\(|bitcoin\.ECPair/i, alt: "Follow Bitcoin PQC proposals (BIP-360 draft)" }, // quantumscan-ignore
+  { id: "solana-keypair",      name: "Solana Keypair (Ed25519)",           sev: "high", re: /Keypair\.generate\s*\(|Keypair\.fromSecretKey\s*\(|Keypair\.fromSeed\s*\(|web3\.Keypair\b/i, alt: "Monitor Solana PQC roadmap" }, // quantumscan-ignore
+  { id: "solidity-ecrecover",  name: "Solidity ecrecover (secp256k1)",     sev: "high", re: /\becrecover\s*\(|ECDSA\.recover\s*\(|ECDSA\.tryRecover\s*\(/i, alt: "Monitor EVM PQC precompile proposals" }, // quantumscan-ignore
+  { id: "bip32-hd-wallet",     name: "BIP32/BIP39 HD Wallet derivation",  sev: "high", re: /BIP32Factory\s*\(|hdkey\.fromMasterSeed\s*\(|HDKey\.fromMasterSeed\s*\(|EthereumHDKey|derivePath\s*\(\s*["']m\//i, alt: "No PQC BIP32 standard yet — monitor BIP proposals" }, // quantumscan-ignore
+  { id: "eth-account-python",  name: "eth-account / web3.py (secp256k1)", sev: "high", re: /from\s+eth_account\s+import|Account\.create\s*\(|Account\.from_key\s*\(|w3\.eth\.account\./i, alt: "Monitor ethereum/py-evm PQC roadmap" }, // quantumscan-ignore
+  { id: "coincurve-secp256k1", name: "coincurve / python-bitcoin",        sev: "high", re: /import\s+coincurve\b|coincurve\.(?:PublicKey|PrivateKey)|from\s+bitcoinlib\s+import.*(?:Key|sign)/i, alt: "ML-DSA (CRYSTALS-Dilithium)" }, // quantumscan-ignore
+  { id: "rust-secp256k1-crate",name: "Rust secp256k1 / k256 crate",      sev: "high", re: /use\s+secp256k1::|use\s+k256::|Secp256k1::new\s*\(|SecretKey::from_slice\s*\(|SigningKey::from_bytes\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" }, // quantumscan-ignore
+  { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey/i, alt: "Monitor TRON PQC roadmap" }, // quantumscan-ignore
   // HIGH — Java JCA / SSH library false-negative fixes (2026-06-04)
-  { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" },
-  { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" },
-  { id: "java-ssh-mina-jsch",  name: "Apache MINA SSHD / JSch client",        sev: "high", re: /SshClient\.setUpDefaultClient\s*\(|new\s+JSch\s*\(|\.setKeyPairProvider\s*\(|SshServer\.setUpDefaultServer\s*\(/i, alt: "Monitor OpenSSH PQC KEX: mlkem768x25519-sha256" },
-  { id: "csharp-ssh-net",      name: "SSH.NET SshClient / PrivateKeyFile",     sev: "high", re: /new\s+SshClient\s*\(|new\s+SftpClient\s*\(|new\s+PrivateKeyFile\s*\(|new\s+RsaKey\s*\(/i, alt: "Monitor OpenSSH PQC roadmap" },
-  { id: "csharp-rsa-cng",      name: "C# RSACng / ECDsaCng (CNG APIs)",        sev: "high", re: /new\s+RSACng\s*\(|new\s+ECDsaCng\s*\(|new\s+DSACng\s*\(|AsymmetricAlgorithm\.Create\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 via NIST FIPS 203/204" },
-  { id: "go-crypto-rsa",       name: "Go stdlib RSA/ECDSA keygen",             sev: "high", re: /rsa\.GenerateKey\s*\(|ecdsa\.GenerateKey\s*\(|rsa\.EncryptPKCS1v15\s*\(|rsa\.SignPKCS1v15\s*\(|rsa\.DecryptPKCS1v15\s*\(/i, alt: "ML-KEM-768 via golang.org/x/crypto/mlkem (FIPS 203)" },
-  { id: "rust-ring",           name: "Rust ring RSA/ECDSA signatures",         sev: "high", re: /ring::signature::(?:RSA_PKCS1|ECDSA_P(?:256|384))|RsaKeyPair::from_pkcs8\s*\(|EcdsaKeyPair::from_pkcs8\s*\(/i, alt: "pqcrypto-dilithium or ml-dsa crate" },
-  { id: "python-paramiko-key", name: "Paramiko RSA/ECDSA key operations",      sev: "high", re: /paramiko\.RSAKey\b|paramiko\.ECDSAKey\b|RSAKey\.generate\s*\(|ECDSAKey\.generate\s*\(|paramiko\.DSSKey\b/i, alt: "Monitor OpenSSH PQC roadmap" },
+  { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
+  { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" }, // quantumscan-ignore
+  { id: "java-ssh-mina-jsch",  name: "Apache MINA SSHD / JSch client",        sev: "high", re: /SshClient\.setUpDefaultClient\s*\(|new\s+JSch\s*\(|\.setKeyPairProvider\s*\(|SshServer\.setUpDefaultServer\s*\(/i, alt: "Monitor OpenSSH PQC KEX: mlkem768x25519-sha256" }, // quantumscan-ignore
+  { id: "csharp-ssh-net",      name: "SSH.NET SshClient / PrivateKeyFile",     sev: "high", re: /new\s+SshClient\s*\(|new\s+SftpClient\s*\(|new\s+PrivateKeyFile\s*\(|new\s+RsaKey\s*\(/i, alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
+  { id: "csharp-rsa-cng",      name: "C# RSACng / ECDsaCng (CNG APIs)",        sev: "high", re: /new\s+RSACng\s*\(|new\s+ECDsaCng\s*\(|new\s+DSACng\s*\(|AsymmetricAlgorithm\.Create\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 via NIST FIPS 203/204" }, // quantumscan-ignore
+  { id: "go-crypto-rsa",       name: "Go stdlib RSA/ECDSA keygen",             sev: "high", re: /rsa\.GenerateKey\s*\(|ecdsa\.GenerateKey\s*\(|rsa\.EncryptPKCS1v15\s*\(|rsa\.SignPKCS1v15\s*\(|rsa\.DecryptPKCS1v15\s*\(/i, alt: "ML-KEM-768 via golang.org/x/crypto/mlkem (FIPS 203)" }, // quantumscan-ignore
+  { id: "rust-ring",           name: "Rust ring RSA/ECDSA signatures",         sev: "high", re: /ring::signature::(?:RSA_PKCS1|ECDSA_P(?:256|384))|RsaKeyPair::from_pkcs8\s*\(|EcdsaKeyPair::from_pkcs8\s*\(/i, alt: "pqcrypto-dilithium or ml-dsa crate" }, // quantumscan-ignore
+  { id: "python-paramiko-key", name: "Paramiko RSA/ECDSA key operations",      sev: "high", re: /paramiko\.RSAKey\b|paramiko\.ECDSAKey\b|RSAKey\.generate\s*\(|ECDSAKey\.generate\s*\(|paramiko\.DSSKey\b/i, alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
   // HIGH — crypto implementation patterns (library internals — 2026-06-08 v1.3.0)
-  { id: "openssl-evp-cipher",  name: "OpenSSL EVP cipher impl",         sev: "high", re: /EVP_(?:Encrypt|Decrypt|Cipher)Init(?:_ex2?)?\s*\(/i,                                                                                     alt: "OpenSSL 3.x oqs-provider for AES-GCM + ML-KEM" },
-  { id: "openssl-rsa-gen",     name: "OpenSSL RSA keygen impl",          sev: "high", re: /RSA_generate_key(?:_ex)?\s*\(|EVP_PKEY_CTX_new_id\s*\(\s*EVP_PKEY_RSA/i,                                                                 alt: "ML-KEM-768 (NIST FIPS 203)" },
-  { id: "openssl-ec-gen",      name: "OpenSSL EC keygen impl",           sev: "high", re: /EC_KEY_new_by_curve_name\s*\(|EC_GROUP_new_by_curve_name\s*\(/i,                                                                          alt: "ML-KEM or ML-DSA via oqs-provider" },
-  { id: "openssl-bn-prime",    name: "OpenSSL BN prime (RSA impl)",      sev: "high", re: /BN_generate_prime(?:_ex2?)?\s*\(/i,                                                                                                       alt: "ML-KEM-768 (NIST FIPS 203)" },
-  { id: "openssl-dsa-gen",     name: "OpenSSL DSA keygen impl",          sev: "high", re: /DSA_generate_key\s*\(|DSA_generate_parameters(?:_ex)?\s*\(/i,                                                                             alt: "ML-DSA-65 (NIST FIPS 204)" },
-  { id: "java-jca-ec-gen",     name: "Java JCA EC KeyPairGenerator",     sev: "high", re: /KeyPairGenerator\.getInstance\s*\(\s*["'](?:EC|ECDH|ECDSA)["']/i,                                                                        alt: "ML-KEM-768 or ML-DSA-65 via Bouncy Castle PQC" },
-  { id: "java-jca-spi",        name: "Java JCA provider SPI impl",       sev: "high", re: /extends\s+(?:KeyPairGeneratorSpi|SignatureSpi|CipherSpi|MessageDigestSpi|KeyAgreementSpi)\b|Security\.addProvider\s*\(/i,                 alt: "Implement PQC via Bouncy Castle bcpqc jar" },
-  { id: "java-jca-keyagree",   name: "Java JCA KeyAgreement ECDH/DH",   sev: "high", re: /KeyAgreement\.getInstance\s*\(\s*["'](?:ECDH|DH|ECMQV)["']/i,                                                                            alt: "ML-KEM-768 (NIST FIPS 203)" },
-  { id: "node-crypto-keygen",  name: "Node.js crypto.generateKeyPair",   sev: "high", re: /crypto\.generateKeyPair(?:Sync)?\s*\(\s*["'](?:rsa|ec|dsa|ed25519|x25519)["']/i,                                                         alt: "await Web Crypto + liboqs-js for ML-KEM/ML-DSA" },
-  { id: "node-crypto-ecdh",    name: "Node.js crypto.createECDH",        sev: "high", re: /crypto\.createECDH\s*\(/i,                                                                                                                alt: "ML-KEM-768 via liboqs-js" },
+  { id: "openssl-evp-cipher",  name: "OpenSSL EVP cipher impl",         sev: "high", re: /EVP_(?:Encrypt|Decrypt|Cipher)Init(?:_ex2?)?\s*\(/i,                                                                                     alt: "OpenSSL 3.x oqs-provider for AES-GCM + ML-KEM" }, // quantumscan-ignore
+  { id: "openssl-rsa-gen",     name: "OpenSSL RSA keygen impl",          sev: "high", re: /RSA_generate_key(?:_ex)?\s*\(|EVP_PKEY_CTX_new_id\s*\(\s*EVP_PKEY_RSA/i,                                                                 alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
+  { id: "openssl-ec-gen",      name: "OpenSSL EC keygen impl",           sev: "high", re: /EC_KEY_new_by_curve_name\s*\(|EC_GROUP_new_by_curve_name\s*\(/i,                                                                          alt: "ML-KEM or ML-DSA via oqs-provider" }, // quantumscan-ignore
+  { id: "openssl-bn-prime",    name: "OpenSSL BN prime (RSA impl)",      sev: "high", re: /BN_generate_prime(?:_ex2?)?\s*\(/i,                                                                                                       alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
+  { id: "openssl-dsa-gen",     name: "OpenSSL DSA keygen impl",          sev: "high", re: /DSA_generate_key\s*\(|DSA_generate_parameters(?:_ex)?\s*\(/i,                                                                             alt: "ML-DSA-65 (NIST FIPS 204)" }, // quantumscan-ignore
+  { id: "java-jca-ec-gen",     name: "Java JCA EC KeyPairGenerator",     sev: "high", re: /KeyPairGenerator\.getInstance\s*\(\s*["'](?:EC|ECDH|ECDSA)["']/i,                                                                        alt: "ML-KEM-768 or ML-DSA-65 via Bouncy Castle PQC" }, // quantumscan-ignore
+  { id: "java-jca-spi",        name: "Java JCA provider SPI impl",       sev: "high", re: /extends\s+(?:KeyPairGeneratorSpi|SignatureSpi|CipherSpi|MessageDigestSpi|KeyAgreementSpi)\b|Security\.addProvider\s*\(/i,                 alt: "Implement PQC via Bouncy Castle bcpqc jar" }, // quantumscan-ignore
+  { id: "java-jca-keyagree",   name: "Java JCA KeyAgreement ECDH/DH",   sev: "high", re: /KeyAgreement\.getInstance\s*\(\s*["'](?:ECDH|DH|ECMQV)["']/i,                                                                            alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
+  { id: "node-crypto-keygen",  name: "Node.js crypto.generateKeyPair",   sev: "high", re: /crypto\.generateKeyPair(?:Sync)?\s*\(\s*["'](?:rsa|ec|dsa|ed25519|x25519)["']/i,                                                         alt: "await Web Crypto + liboqs-js for ML-KEM/ML-DSA" }, // quantumscan-ignore
+  { id: "node-crypto-ecdh",    name: "Node.js crypto.createECDH",        sev: "high", re: /crypto\.createECDH\s*\(/i,                                                                                                                alt: "ML-KEM-768 via liboqs-js" }, // quantumscan-ignore
+  // HIGH — extended language / framework coverage (2026-06-09 v1.4.0)
+  { id: "python-hazmat-rsa",  name: "Python hazmat RSA/DSA/DH keygen",  sev: "high", re: /(?:rsa|dsa|dh)\.generate_(?:private_key|parameters)\s*\(/i,                                                                                           alt: "ML-KEM-768 or ML-DSA-65 via pqcrypto package \(NIST FIPS 203/204\)" }, // quantumscan-ignore
+  { id: "python-hazmat-ec",   name: "Python hazmat EC keygen",           sev: "high", re: /ec\.generate_private_key\s*\(/i,                                                                                                                          alt: "ML-DSA-65 \(NIST FIPS 204\) for signatures; ML-KEM-768 for KEM" }, // quantumscan-ignore
+  { id: "swift-seckey",       name: "Swift/iOS SecKey RSA/ECDSA keygen", sev: "high", re: /SecKeyCreateRandomKey\s*\(|kSecAttrKeyTypeRSA\b|kSecAttrKeyTypeECSECPrimeRandom\b|SecKeyGeneratePair\s*\(/i,                                              alt: "Monitor Apple CryptoKit PQC roadmap" }, // quantumscan-ignore
+  { id: "csharp-rsa-create",  name: "C# RSA.Create / ECDsa.Create",      sev: "high", re: /\bRSA\.Create\s*\(|\bECDsa\.Create\s*\(|\bDSA\.Create\s*\(/i,                                                                                            alt: "ML-KEM-768 or ML-DSA-65 via NIST FIPS 203/204" }, // quantumscan-ignore
+  { id: "php-openssl-asym",   name: "PHP openssl asymmetric ops",        sev: "high", re: /openssl_sign\s*\(|openssl_verify\s*\(|openssl_private_encrypt\s*\(|openssl_public_decrypt\s*\(/i,                                                         alt: "Await PHP PQC ext; short-term: use HMAC-SHA256 for integrity" }, // quantumscan-ignore
+  { id: "aws-s2n-tls",        name: "AWS s2n-tls classical TLS conn",    sev: "high", re: /s2n_connection_new\s*\(|s2n_config_new\s*\(|s2n_cipher_preferences|s2n_send\s*\(|s2n_recv\s*\(/i,                                                        alt: "Enable ML-KEM via AWS-LC: S2N_TLS_KEM_GROUP_X25519_KYBER_512_R3" }, // quantumscan-ignore
+  { id: "openssh-sshkey-gen", name: "OpenSSH C sshkey_generate",         sev: "high", re: /sshkey_generate\s*\(|sshkey_ecdsa_new\s*\(|sshkey_dsa_generate\s*\(|KEX_CLIENT_ENCRYPT\b/i,                                                              alt: "Set KexAlgorithms mlkem768x25519-sha256 in sshd_config" }, // quantumscan-ignore
+  { id: "rustls-config",      name: "rustls classical TLS ClientConfig", sev: "high", re: /rustls::(?:Client|Server)Config::builder\s*\(|ClientConnection::new\s*\(|RootCertStore::empty\s*\(\)/i,                                                   alt: "Monitor rustls PQC roadmap; use aws-lc-rs provider for ML-KEM hybrid" }, // quantumscan-ignore
   // LOW — informational
-  { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i },
-  { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" },
-  { id: "sha256-kdf",   name: "SHA-256 as password KDF",  sev: "low",      re: /sha256.*(?:password|passphrase)\b|(?:password|passphrase).*sha256/i, alt: "Argon2id or bcrypt" },
-  { id: "dh-1024",      name: "DH 1024-bit params",       sev: "low",      re: /DHParameterSpec\s*\(\s*1024|generate_parameters.*1024|dhparam\s+1024/i, alt: "ML-KEM" },
+  { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
+  { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
+  { id: "sha256-kdf",   name: "SHA-256 as password KDF",  sev: "low",      re: /sha256.*(?:password|passphrase)\b|(?:password|passphrase).*sha256/i, alt: "Argon2id or bcrypt" }, // quantumscan-ignore
+  { id: "dh-1024",      name: "DH 1024-bit params",       sev: "low",      re: /DHParameterSpec\s*\(\s*1024|generate_parameters.*1024|dhparam\s+1024/i, alt: "ML-KEM" }, // quantumscan-ignore
 ];
 
 // ── Vulnerable dependencies ───────────────────────────────────────────────────
 const VULNERABLE_DEPS = [
   // npm / package.json
-  { pkg: "node-forge",       eco: "npm",    sev: "high",     reason: "RSA/ECDSA/DH crypto library",               alt: "Web Crypto API + liboqs-js" },
-  { pkg: "jsrsasign",        eco: "npm",    sev: "high",     reason: "RSA/ECDSA/DSA signatures",                  alt: "ml-dsa" },
-  { pkg: "elliptic",         eco: "npm",    sev: "high",     reason: "Elliptic curve crypto (secp256k1, P-256)",   alt: "ml-kem / ml-dsa" },
-  { pkg: "secp256k1",        eco: "npm",    sev: "high",     reason: "secp256k1 curve (Shor-vulnerable)",         alt: "ml-dsa for signatures" },
-  { pkg: "bitcoinjs-lib",    eco: "npm",    sev: "high",     reason: "secp256k1 Bitcoin transactions",            alt: "Monitor BIP-360 draft" },
-  { pkg: "@noble/secp256k1", eco: "npm",    sev: "high",     reason: "secp256k1 (Shor-vulnerable)",               alt: "ml-dsa" },
-  { pkg: "noble-secp256k1",  eco: "npm",    sev: "high",     reason: "secp256k1",                                 alt: "ml-dsa" },
-  { pkg: "@noble/curves",    eco: "npm",    sev: "high",     reason: "ECC curves including secp256k1 and P-256",  alt: "ml-kem / ml-dsa" },
-  { pkg: "jose",             eco: "npm",    sev: "medium",   reason: "Supports RS256/ES256 JWT algorithms",       alt: "Use HS256 only until PQC JOSE RFC" },
-  { pkg: "jsonwebtoken",     eco: "npm",    sev: "medium",   reason: "RS256/ES256 JWT by default",                alt: "Use HS256 algorithms only" },
-  { pkg: "ssh2",             eco: "npm",    sev: "high",     reason: "RSA/ECDSA SSH host keys",                   alt: "Monitor OpenSSH PQC roadmap" },
-  { pkg: "forge",            eco: "npm",    sev: "high",     reason: "Alias for node-forge — RSA/ECDSA",          alt: "Web Crypto API + liboqs-js" },
+  { pkg: "node-forge",       eco: "npm",    sev: "high",     reason: "RSA/ECDSA/DH crypto library",               alt: "Web Crypto API + liboqs-js" }, // quantumscan-ignore
+  { pkg: "jsrsasign",        eco: "npm",    sev: "high",     reason: "RSA/ECDSA/DSA signatures",                  alt: "ml-dsa" }, // quantumscan-ignore
+  { pkg: "elliptic",         eco: "npm",    sev: "high",     reason: "Elliptic curve crypto (secp256k1, P-256)",   alt: "ml-kem / ml-dsa" }, // quantumscan-ignore
+  { pkg: "secp256k1",        eco: "npm",    sev: "high",     reason: "secp256k1 curve (Shor-vulnerable)",         alt: "ml-dsa for signatures" }, // quantumscan-ignore
+  { pkg: "bitcoinjs-lib",    eco: "npm",    sev: "high",     reason: "secp256k1 Bitcoin transactions",            alt: "Monitor BIP-360 draft" }, // quantumscan-ignore
+  { pkg: "@noble/secp256k1", eco: "npm",    sev: "high",     reason: "secp256k1 (Shor-vulnerable)",               alt: "ml-dsa" }, // quantumscan-ignore
+  { pkg: "noble-secp256k1",  eco: "npm",    sev: "high",     reason: "secp256k1",                                 alt: "ml-dsa" }, // quantumscan-ignore
+  { pkg: "@noble/curves",    eco: "npm",    sev: "high",     reason: "ECC curves including secp256k1 and P-256",  alt: "ml-kem / ml-dsa" }, // quantumscan-ignore
+  { pkg: "jose",             eco: "npm",    sev: "medium",   reason: "Supports RS256/ES256 JWT algorithms",       alt: "Use HS256 only until PQC JOSE RFC" }, // quantumscan-ignore
+  { pkg: "jsonwebtoken",     eco: "npm",    sev: "medium",   reason: "RS256/ES256 JWT by default",                alt: "Use HS256 algorithms only" }, // quantumscan-ignore
+  { pkg: "ssh2",             eco: "npm",    sev: "high",     reason: "RSA/ECDSA SSH host keys",                   alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
+  { pkg: "forge",            eco: "npm",    sev: "high",     reason: "Alias for node-forge — RSA/ECDSA",          alt: "Web Crypto API + liboqs-js" }, // quantumscan-ignore
   // Python / requirements.txt
-  { pkg: "ecdsa",            eco: "python", sev: "critical", reason: "Pure ECDSA — named after the broken algo",  alt: "pqcrypto (dilithium)" },
-  { pkg: "python-ecdsa",     eco: "python", sev: "critical", reason: "Pure ECDSA implementation",                alt: "pqcrypto (dilithium)" },
-  { pkg: "pyOpenSSL",        eco: "python", sev: "high",     reason: "RSA/ECDSA TLS operations",                 alt: "Monitor OpenSSL PQC roadmap" },
-  { pkg: "pyjwt",            eco: "python", sev: "medium",   reason: "RS256/ES256/PS256 JWT support",            alt: "Use HS256 algorithms only" },
-  { pkg: "python-jose",      eco: "python", sev: "medium",   reason: "RSA/ECDSA JWT",                            alt: "Use HS256 only" },
-  { pkg: "paramiko",         eco: "python", sev: "high",     reason: "RSA/ECDSA SSH transport",                  alt: "Monitor OpenSSH PQC roadmap" },
-  { pkg: "eth-account",      eco: "python", sev: "high",     reason: "secp256k1 Ethereum accounts",              alt: "Monitor ethereum PQC roadmap" },
-  { pkg: "coincurve",        eco: "python", sev: "high",     reason: "secp256k1 Python bindings",                alt: "pqcrypto (dilithium)" },
+  { pkg: "ecdsa",            eco: "python", sev: "critical", reason: "Pure ECDSA — named after the broken algo",  alt: "pqcrypto (dilithium)" }, // quantumscan-ignore
+  { pkg: "python-ecdsa",     eco: "python", sev: "critical", reason: "Pure ECDSA implementation",                alt: "pqcrypto (dilithium)" }, // quantumscan-ignore
+  { pkg: "pyOpenSSL",        eco: "python", sev: "high",     reason: "RSA/ECDSA TLS operations",                 alt: "Monitor OpenSSL PQC roadmap" }, // quantumscan-ignore
+  { pkg: "pyjwt",            eco: "python", sev: "medium",   reason: "RS256/ES256/PS256 JWT support",            alt: "Use HS256 algorithms only" }, // quantumscan-ignore
+  { pkg: "python-jose",      eco: "python", sev: "medium",   reason: "RSA/ECDSA JWT",                            alt: "Use HS256 only" }, // quantumscan-ignore
+  { pkg: "paramiko",         eco: "python", sev: "high",     reason: "RSA/ECDSA SSH transport",                  alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
+  { pkg: "eth-account",      eco: "python", sev: "high",     reason: "secp256k1 Ethereum accounts",              alt: "Monitor ethereum PQC roadmap" }, // quantumscan-ignore
+  { pkg: "coincurve",        eco: "python", sev: "high",     reason: "secp256k1 Python bindings",                alt: "pqcrypto (dilithium)" }, // quantumscan-ignore
   // Java / pom.xml (groupId prefix match)
-  { pkg: "org.bouncycastle", eco: "maven",  sev: "high",     reason: "RSA/ECDSA/DSA — use bcpqc for PQC",        alt: "Upgrade to bcpqc jar (Bouncy Castle PQC)" },
-  { pkg: "org.apache.sshd", eco: "maven",  sev: "high",     reason: "Apache MINA SSHD — RSA/ECDSA host keys & auth", alt: "Monitor Apache MINA PQC roadmap; prefer mlkem768x25519 KEX" },
-  { pkg: "com.jcraft",      eco: "maven",  sev: "high",     reason: "JSch — RSA/ECDSA SSH transport",               alt: "Monitor OpenSSH PQC roadmap" },
-  { pkg: "net.schmizz",     eco: "maven",  sev: "high",     reason: "sshj — RSA/ECDSA SSH transport",               alt: "Monitor PQC KEX support in sshj" },
-  { pkg: "io.jsonwebtoken",  eco: "maven",  sev: "medium",   reason: "RS256/ES256 JWT",                          alt: "Use HS256 algorithms only" },
-  { pkg: "com.auth0:java-jwt",eco: "maven", sev: "medium",   reason: "RSA/ECDSA JWT support",                    alt: "Use HMAC algorithms only" },
+  { pkg: "org.bouncycastle", eco: "maven",  sev: "high",     reason: "RSA/ECDSA/DSA — use bcpqc for PQC",        alt: "Upgrade to bcpqc jar (Bouncy Castle PQC)" }, // quantumscan-ignore
+  { pkg: "org.apache.sshd", eco: "maven",  sev: "high",     reason: "Apache MINA SSHD — RSA/ECDSA host keys & auth", alt: "Monitor Apache MINA PQC roadmap; prefer mlkem768x25519 KEX" }, // quantumscan-ignore
+  { pkg: "com.jcraft",      eco: "maven",  sev: "high",     reason: "JSch — RSA/ECDSA SSH transport",               alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
+  { pkg: "net.schmizz",     eco: "maven",  sev: "high",     reason: "sshj — RSA/ECDSA SSH transport",               alt: "Monitor PQC KEX support in sshj" }, // quantumscan-ignore
+  { pkg: "io.jsonwebtoken",  eco: "maven",  sev: "medium",   reason: "RS256/ES256 JWT",                          alt: "Use HS256 algorithms only" }, // quantumscan-ignore
+  { pkg: "com.auth0:java-jwt",eco: "maven", sev: "medium",   reason: "RSA/ECDSA JWT support",                    alt: "Use HMAC algorithms only" }, // quantumscan-ignore
   // Go / go.mod
-  { pkg: "golang.org/x/crypto", eco: "go", sev: "medium",   reason: "Contains Ed25519, x/crypto/ssh, ECDH",     alt: "stdlib crypto/ecdh; await Go stdlib ML-KEM" },
+  { pkg: "golang.org/x/crypto", eco: "go", sev: "medium",   reason: "Contains Ed25519, x/crypto/ssh, ECDH",     alt: "stdlib crypto/ecdh; await Go stdlib ML-KEM" }, // quantumscan-ignore
   // Rust / Cargo.toml
-  { pkg: "rsa",              eco: "rust",   sev: "high",     reason: "RSA crate (Shor-vulnerable)",              alt: "pqcrypto-kyber or oqs-rs" },
-  { pkg: "ecdsa",            eco: "rust",   sev: "high",     reason: "ECDSA crate",                              alt: "pqcrypto-dilithium" },
-  { pkg: "secp256k1",        eco: "rust",   sev: "high",     reason: "secp256k1 crate",                          alt: "pqcrypto-dilithium" },
-  { pkg: "k256",             eco: "rust",   sev: "high",     reason: "k256 (secp256k1) crate",                   alt: "pqcrypto-dilithium" },
-  { pkg: "p256",             eco: "rust",   sev: "high",     reason: "p256 (NIST P-256) crate",                  alt: "pqcrypto-dilithium" },
-  { pkg: "ed25519-dalek",    eco: "rust",   sev: "high",     reason: "Ed25519 (Shor-vulnerable)",                alt: "ML-DSA via pqcrypto-dilithium" },
-  { pkg: "x25519-dalek",     eco: "rust",   sev: "high",     reason: "X25519 key exchange (Shor-vulnerable)",    alt: "ML-KEM via pqcrypto-kyber" },
-  { pkg: "ring",             eco: "rust",   sev: "high",     reason: "ring crate — RSA/ECDSA/ECDH operations",   alt: "pqcrypto-kyber for KEM; pqcrypto-dilithium for signatures" },
+  { pkg: "rsa",              eco: "rust",   sev: "high",     reason: "RSA crate (Shor-vulnerable)",              alt: "pqcrypto-kyber or oqs-rs" }, // quantumscan-ignore
+  { pkg: "ecdsa",            eco: "rust",   sev: "high",     reason: "ECDSA crate",                              alt: "pqcrypto-dilithium" }, // quantumscan-ignore
+  { pkg: "secp256k1",        eco: "rust",   sev: "high",     reason: "secp256k1 crate",                          alt: "pqcrypto-dilithium" }, // quantumscan-ignore
+  { pkg: "k256",             eco: "rust",   sev: "high",     reason: "k256 (secp256k1) crate",                   alt: "pqcrypto-dilithium" }, // quantumscan-ignore
+  { pkg: "p256",             eco: "rust",   sev: "high",     reason: "p256 (NIST P-256) crate",                  alt: "pqcrypto-dilithium" }, // quantumscan-ignore
+  { pkg: "ed25519-dalek",    eco: "rust",   sev: "high",     reason: "Ed25519 (Shor-vulnerable)",                alt: "ML-DSA via pqcrypto-dilithium" }, // quantumscan-ignore
+  { pkg: "x25519-dalek",     eco: "rust",   sev: "high",     reason: "X25519 key exchange (Shor-vulnerable)",    alt: "ML-KEM via pqcrypto-kyber" }, // quantumscan-ignore
+  { pkg: "ring",             eco: "rust",   sev: "high",     reason: "ring crate — RSA/ECDSA/ECDH operations",   alt: "pqcrypto-kyber for KEM; pqcrypto-dilithium for signatures" }, // quantumscan-ignore
 ];
 
 const SCANNABLE_EXTS = new Set([
@@ -163,7 +172,7 @@ const SKIP_DIRS = new Set([
 ]);
 
 // ── Crypto library detector ───────────────────────────────────────────────────
-const CRYPTO_LIB_HINTS = /\b(crypto|cipher|ssl|tls|ssh|rsa|ecdsa|ecdh|dsa|dh|pgp|gpg|tink|botan|openssl|libsodium|nacl|bcrypt|argon|signal|noise|kyber|dilithium|falcon|sphincs|pqcrypto|liboqs|mina.?sshd|jsch|paramiko)\b/i;
+const CRYPTO_LIB_HINTS = /\b(crypto|cipher|ssl|tls|ssh|rsa|ecdsa|ecdh|dsa|dh|pgp|gpg|tink|botan|openssl|libsodium|nacl|bcrypt|argon|signal|noise|kyber|dilithium|falcon|sphincs|pqcrypto|liboqs|mina.?sshd|jsch|paramiko)\b/i; // quantumscan-ignore
 
 function mayBeCryptoLib(targetDir, allFiles) {
   if (CRYPTO_LIB_HINTS.test(basename(targetDir))) return true;
@@ -506,7 +515,7 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
   console.log(`Risk Score  ${C.bold}${score}/100${C.reset}  ${riskLabel(score)}`);
 
   if (findings.length > 0) {
-    console.log(`\n${C.dim}Migrate to: ML-KEM (key encap, FIPS 203) · ML-DSA (signatures, FIPS 204)${C.reset}`);
+    console.log(`\n${C.dim}Migrate to: ML-KEM (key encap, FIPS 203) · ML-DSA (signatures, FIPS 204)${C.reset}`); // quantumscan-ignore
     console.log(`${C.dim}Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.${C.reset}`);
     console.log(`\n${C.cyan}Full AI analysis + migration guides → ${APP_URL}${C.reset}`);
     console.log(`${C.dim}Add ${C.reset}${C.bold}// quantumscan-ignore${C.reset}${C.dim} to suppress a false positive.${C.reset}`);
@@ -564,7 +573,7 @@ function printSarif(findings, targetDir) {
     id: "QS/dep",
     name: "VulnerableDependency",
     shortDescription: { text: "Quantum-vulnerable dependency" },
-    fullDescription: { text: "A dependency uses quantum-vulnerable cryptography (RSA, ECDSA, or similar)." },
+    fullDescription: { text: "A dependency uses quantum-vulnerable cryptography (RSA, ECDSA, or similar)." }, // quantumscan-ignore
     helpUri: `${APP_URL}/why-now`,
     defaultConfiguration: { level: "warning" },
     properties: { tags: ["security", "pqc", "dependency"] },
@@ -643,6 +652,7 @@ Options:
   --json             Output results as JSON (for CI/CD pipelines)
   --sarif            Output results as SARIF 2.1.0 (GitHub Security tab)
   --no-deps          Skip dependency scanning (package.json, requirements.txt…)
+  --no-code          Skip source code scanning (only scan dependencies)
   --badge            Print README badge markdown after scan
   --no-fail          Exit 0 even when findings are found (default: exit 1)
   --version          Show version
@@ -678,6 +688,7 @@ function main() {
   const sarifMode = args.includes("--sarif");
   const badgeMode = args.includes("--badge");
   const noDeps    = args.includes("--no-deps");
+  const noCode    = args.includes("--no-code");
   const noFail    = args.includes("--no-fail");
   const pathArg   = args.find(a => !a.startsWith("-")) ?? ".";
 
@@ -703,7 +714,7 @@ function main() {
   }
 
   const scannableFiles  = allFiles.filter(f => SCANNABLE_EXTS.has(extname(f).toLowerCase()));
-  const codeFindings    = scannableFiles.flatMap(f => scanFile(f, targetDir));
+  const codeFindings    = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir));
   const depFindings     = noDeps ? [] : scanDependencies(targetDir);
   const allFindings     = [...codeFindings, ...depFindings];
   const score           = calcScore(allFindings);
