@@ -511,6 +511,7 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
     console.log(`\n${C.cyan}Full AI analysis + migration guides → ${APP_URL}${C.reset}`);
     console.log(`${C.dim}Add ${C.reset}${C.bold}// quantumscan-ignore${C.reset}${C.dim} to suppress a false positive.${C.reset}`);
   }
+  console.log(`\n${C.dim}If this was useful → ⭐ ${C.reset}${C.bold}github.com/quantumscan-io/scanner-core${C.reset}`);
   console.log("");
 }
 

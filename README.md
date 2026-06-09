@@ -1,52 +1,76 @@
 # scanner-core
 
-> Open-source post-quantum cryptography (PQC) vulnerability scanner.
-> MIT licensed · JavaScript (ESM) · Privacy-first by design.
-
 [![CI](https://github.com/quantumscan-io/scanner-core/actions/workflows/ci.yml/badge.svg)](https://github.com/quantumscan-io/scanner-core/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/quantumscan.svg)](https://www.npmjs.com/package/quantumscan)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![npm](https://img.shields.io/badge/npm-quantumscan-red.svg)](https://www.npmjs.com/package/quantumscan)
-[![DORA](https://img.shields.io/badge/compliance-DORA-purple.svg)](#compliance)
-[![NIS2](https://img.shields.io/badge/compliance-NIS2-purple.svg)](#compliance)
-[![NIST PQC](https://img.shields.io/badge/standard-NIST%20PQC-green.svg)](#compliance)
 [![Stars](https://img.shields.io/github/stars/quantumscan-io/scanner-core?style=social)](https://github.com/quantumscan-io/scanner-core/stargazers)
 
-> **Help us reach 1,000 ⭐** — every star helps scanner-core get listed in security awesome-lists and reach more developers before Q-day.
+**Open-source CLI that finds quantum-vulnerable cryptography in your codebase.**
+
+RSA, ECDSA, DH, SHA-1, DES — algorithms that a large-enough quantum computer breaks in hours. NIST, DORA and NIS2 mandate migration by 2030. This tool tells you where you stand today.
+
+```bash
+npx quantumscan .
+```
+
+No install. No account. No code leaves your machine. MIT licensed.
+
+---
+
+## What it finds
+
+We scanned some of the most-used crypto libraries in the world:
+
+| Repository | Risk Score | Key Finding |
+|---|---|---|
+| [tlsfuzzer/python-ecdsa](https://quantumscan.io/en/share/b8debd2c-8af8-4052-ab24-134fe4b348a8) | **95/100** | 171 ECDSA patterns — a library built entirely on an algorithm Shor's can break |
+| [bitcoin/bitcoin](https://quantumscan.io/en/share/12c86aea-2652-455f-ae23-958cd92fc714) | **89/100** | secp256k1 ECDSA in every transaction |
+| [bcgit/bc-java](https://quantumscan.io/en/share/17ba30c8-d148-4f89-bcdd-8fbdc9fee588) | **78/100** | #1 Java crypto library — RSA and ECDSA throughout |
+| [hashicorp/vault](https://quantumscan.io/en/share/6184cf79-9dfa-4556-b524-e4789382bced) | **73/100** | Enterprise secrets manager using secp256k1 |
+| [jpadilla/pyjwt](https://quantumscan.io/en/share/740a40df-fd8e-4700-befb-a422b3b1e69e) | **72/100** | 36M+ PyPI downloads/month — RS256/ES256 default |
+| curl/curl | **12/100** | Mostly clean — good reference |
+
+→ [Full leaderboard](https://quantumscan.io/leaderboard)
 
 ---
 
 ## Quick start
 
-No install required. Run directly with npx:
-
 ```bash
-npx quantumscan .               # scan current directory
-npx quantumscan ./src           # scan specific path
-npx quantumscan . --json        # JSON output for CI/CD
-npx quantumscan . --sarif       # SARIF 2.1.0 output (GitHub Security tab)
-npx quantumscan . --badge       # print README badge markdown
-npx quantumscan . --no-deps     # skip dependency scanning
-npx quantumscan . --no-fail     # exit 0 even with findings
+# Scan the current directory
+npx quantumscan .
+
+# Scan a specific path
+npx quantumscan ./src
+
+# JSON output for CI/CD pipelines
+npx quantumscan . --json
+
+# SARIF output for GitHub Security tab
+npx quantumscan . --sarif > results.sarif
+
+# Print a README badge for your repo
+npx quantumscan . --badge
+
+# Skip dependency scanning
+npx quantumscan . --no-deps
 ```
 
 Example output:
 
 ```
-QuantumScan v1.0.0  Post-Quantum Cryptography Scanner
-https://quantumscan.io
+QuantumScan v1.3.0  Post-Quantum Cryptography Scanner
 ──────────────────────────────────────────────────────────
 Path     /your/project
 Files    312 total · 87 scannable
 
-🔴 CRITICAL   3 findings
-  auth/session.js:14      MD5        `md5(`
-  lib/crypto.js:88        AES-ECB    `AES/ECB/`
-  config/tls.js:5         TLS 1.0    `TLSv1.0`
+🔴 CRITICAL   2 findings
+  config/tls.js:5         TLS 1.0    TLSv1.0
+  auth/session.js:14      MD5        md5(
 
-🟠 HIGH        5 findings
-  auth/jwt.js:22          RSA        `RSA.generate(`
-  lib/keys.js:41          ECDSA      `ECDSA`
-  ...
+🟠 HIGH        4 findings
+  auth/jwt.js:22          RSA        RSA.generate(
+  lib/keys.js:41          ECDSA      ECDSA
 
 ──────────────────────────────────────────────────────────
 Risk Score  68/100  High Risk
@@ -55,201 +79,161 @@ Migrate to: ML-KEM (FIPS 203) · ML-DSA (FIPS 204)
 Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.
 
 Full AI analysis + migration guides → https://quantumscan.io
+
+If this was useful → ⭐ github.com/quantumscan-io/scanner-core
 ```
 
-## Suppressing false positives
+---
 
-Add `// quantumscan-ignore` (or `# quantumscan-ignore` for Python/Ruby) to the end of a line, or on the line before it, to suppress that specific finding:
+## What it detects
 
-```python
-# This constant is only used in validation tests — not a real crypto call
-REJECTED_ALGO = "RS256"  # quantumscan-ignore
+| Severity | Algorithms |
+|---|---|
+| **CRITICAL** | TLS < 1.2, SSLv3, MD5, SHA-1, DES, 3DES, RC4, AES-ECB, RSA ≤ 2048-bit |
+| **HIGH** | RSA, ECDSA, ECDH, DSA, DH, P-256/384/521, secp256k1, Ed25519, X25519 |
+| **HIGH** | Blockchain: ethers.js Wallet, web3.js accounts, bitcoinjs-lib ECPair, Solana Keypair, BIP32/HD wallets |
+| **MEDIUM** | AES-128, CBC mode, HMAC-SHA1, PBKDF2 low iterations, Math.random in crypto |
+| **LOW** | Hardcoded keys, CRC32 for integrity, SHA-256 as KDF |
 
-# Or suppress the next line:
-# quantumscan-ignore
-legacy_hash = hashlib.sha1(nonce)  # test vector, no security impact
-```
+For each finding the engine maps a NIST PQC replacement:
+- **ML-KEM** (FIPS 203) — key encapsulation
+- **ML-DSA** (FIPS 204) — digital signatures  
+- **SLH-DSA** (FIPS 205) — hash-based signature fallback
 
-Works in all supported languages. One suppression per line — does not disable the whole file.
+---
+
+## Languages
+
+TypeScript · JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C · C++ · C# / .NET · Ruby · PHP · Solidity
 
 ---
 
 ## Dependency scanning
 
-scanner-core automatically scans your package manifests for dependencies that use quantum-vulnerable cryptography:
+Scans package manifests for crypto libraries that are quantum-vulnerable:
 
-| Manifest | Ecosystem |
-|---|---|
-| `package.json` | npm |
-| `requirements.txt` | Python / pip |
-| `go.mod` | Go modules |
-| `Cargo.toml` | Rust / crates.io |
-| `pom.xml` | Java / Maven |
-
-Example output:
 ```
-📦 DEPENDENCIES  3 vulnerable package(s)
+📦 DEPENDENCIES  2 vulnerable package(s)
   package.json    elliptic     Elliptic curve crypto (secp256k1, P-256)
-    → ml-kem / ml-dsa
-  requirements.txt  ecdsa==0.19.0  Pure ECDSA — named after the broken algo
-    → pqcrypto (dilithium)
+                    → ml-kem / ml-dsa
+  requirements.txt  ecdsa==0.19.0  Pure ECDSA
+                    → pqcrypto (dilithium)
 ```
 
-To skip dependency scanning: `npx quantumscan . --no-deps`
+Supported: `package.json` · `requirements.txt` · `go.mod` · `Cargo.toml` · `pom.xml`
 
 ---
 
-## SARIF output (GitHub Security tab)
-
-Use `--sarif` to output [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) format — the standard consumed by GitHub Security, GitLab SAST, VS Code, and most DevSecOps pipelines:
-
-```bash
-npx quantumscan . --sarif > results.sarif
-```
-
-**GitHub Actions integration** — upload to Security tab:
+## GitHub Actions integration
 
 ```yaml
 - name: Scan for quantum-vulnerable crypto
   run: npx quantumscan . --sarif --no-fail > results.sarif
 
-- name: Upload SARIF
+- name: Upload to GitHub Security tab
   uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: results.sarif
 ```
 
-After the workflow runs, findings appear under **Security → Code scanning** in your repository.
+Findings appear under **Security → Code scanning** after the workflow runs.
 
 ---
 
-## Add a badge to your repo
+## Suppressing false positives
 
-Show your quantum-safety score directly in your README. The badge auto-updates every time you run a cloud scan at [quantumscan.io](https://quantumscan.io).
+```python
+REJECTED_ALGO = "RS256"  # quantumscan-ignore
 
-**Option 1 — Auto-generate from CLI (detects your GitHub remote):**
+# quantumscan-ignore
+legacy_hash = hashlib.sha1(nonce)  # test vector only
+```
+
+Works in all supported languages. Suppresses the specific line, not the whole file.
+
+---
+
+## Add a badge to your README
 
 ```bash
 npx quantumscan . --badge
 ```
 
-Outputs:
-```
-README badge (add to your README.md):
-[![QuantumScan](https://quantumscan.io/api/badge/owner/repo.svg)](https://quantumscan.io/en/scan)
-```
-
-**Option 2 — Manually:**
-
-```markdown
-[![QuantumScan](https://quantumscan.io/api/badge/YOUR_USERNAME/YOUR_REPO.svg)](https://quantumscan.io)
-```
+Outputs ready-to-paste Markdown. The badge auto-updates on every cloud scan at [quantumscan.io](https://quantumscan.io).
 
 ---
 
-## Real-world scans — 2026-05-29 batch
+## Architecture
 
-Scanned 30 public repos today across GitHub, GitLab, Bitbucket, and ZIP uploads:
+`scanner-core` is the detection engine behind [quantumscan.io](https://quantumscan.io). Released as MIT so that:
 
-| Repository | Platform | Risk Score | Key Finding |
-|---|---|---|---|
-| [tlsfuzzer/python-ecdsa](https://quantumscan.io/en/share/b8debd2c-8af8-4052-ab24-134fe4b348a8) | GitHub | **95/100** | 171 ECDSA patterns · 9 critical SHA-1 usages |
-| [bitcoin/bitcoin](https://quantumscan.io/en/share/12c86aea-2652-455f-ae23-958cd92fc714) | GitHub | **89/100** | secp256k1 ECDSA in every transaction |
-| [bcgit/bc-java](https://quantumscan.io/en/share/17ba30c8-d148-4f89-bcdd-8fbdc9fee588) | GitHub | **78/100** | #1 Java crypto library |
-| [gnutls/gnutls](https://quantumscan.io/en/share/ef777d8a-eeae-4870-bf04-c4688e4e7804) | GitLab | **78/100** | Linux TLS stack |
-| [hashicorp/vault](https://quantumscan.io/en/share/6184cf79-9dfa-4556-b524-e4789382bced) | GitHub | **73/100** | Enterprise secrets manager |
-| [jpadilla/pyjwt](https://quantumscan.io/en/share/740a40df-fd8e-4700-befb-a422b3b1e69e) | GitHub | **72/100** | 36M+ PyPI downloads/month |
-| [oscrypto](https://quantumscan.io/en/share/065d3505-e0ca-4e8b-9fcd-99a672e2f4fa) | ZIP | **72/100** | OS crypto bindings |
-| [paragonie/halite](https://quantumscan.io/en/share/0477e2a0-6a41-45e7-9c9b-37fc711b1295) | GitHub | 72/100 | PHP high-level crypto |
-| [curl/curl](https://quantumscan.io/en/share/8ac0abfb-e26d-4988-843b-5a6a0e5a776a) | GitHub | 12/100 | Mostly clean |
-| spring-projects/spring-security | GitHub | 8/100 | Low exposure |
-| inkscape/inkscape | GitLab | 8/100 | Low exposure |
-| libvirt/libvirt · dolfin (Bitbucket) | GitLab/BB | 0/100 | Clean |
+- **You can audit every line.** No trust required — the engine is the same one running in our CI.
+- **Scans stay local.** The same binary runs inside your GitHub Actions runner. Source code never leaves your infra.
+- **The community extends it.** Detection patterns, language support, and PQC mappings evolve with public contribution.
 
-→ [Full leaderboard: quantumscan.io/leaderboard](https://quantumscan.io/leaderboard)
+The hosted SaaS (AI migration guides, CBOM CycloneDX export, DORA/NIS2 PDF reports, drift detection) lives in a separate private repo.
 
 ---
-
-## What this is
-
-`scanner-core` is the open-source detection engine behind [QuantumScan](https://quantumscan.io).
-
-The core scanner is released as MIT-licensed open source so that:
-
-- **Customers can audit it.** Compliance teams (banks, fintechs, govtech) can read every line, fork it, and verify that the binary running in their CI matches the published source.
-- **The scan can run client-side.** The same engine runs inside the user's GitHub Actions runner — source code never leaves the customer's infrastructure.
-- **The community can extend it.** Detection patterns, language support, and PQC mapping rules evolve with public review and contribution.
-
-The hosted SaaS, dashboard, and customer-facing reports live in a separate (private) repository. This repository contains only the detection engine.
-
-## What it detects
-
-| Severity | Examples |
-|---|---|
-| **CRITICAL** | TLS < 1.2, SSLv3, MD5, SHA1, DES, 3DES, RC4, RSA < 2048 |
-| **HIGH** (quantum-vulnerable) | RSA, ECDSA, ECDH, DSA, DH, NIST P-256/384/521, secp curves, Curve25519, X25519, Ed25519 |
-| **MEDIUM** | AES-128, OpenSSL < 1.1, CBC mode |
-| **LOW** | HMAC-SHA1, hardcoded keys in string literals |
-
-For each finding, the engine maps a recommended NIST PQC standardized alternative:
-
-- **ML-KEM** (FIPS 203) — key encapsulation
-- **ML-DSA** (FIPS 204) — digital signatures
-- **SLH-DSA** (FIPS 205) — hash-based signature fallback
-
-## Languages supported
-
-TypeScript / JavaScript · Python · Go · Java · Kotlin · Swift · Rust · C / C++ · C# / .NET · Ruby · PHP
-
-## Roadmap
-
-- [x] **v1.0** — Core regex engine, 50+ patterns, multi-language support, `npx quantumscan` CLI — **LIVE**
-- [x] **SaaS** — full dashboard, drift detection, DORA/NIS2 PDF reports — **LIVE at quantumscan.io**
-- [x] **GitHub PR Bot** — automatic PQC scan on every pull request — **submitted to GitHub Marketplace**
-- [x] **Multi-platform** — GitHub + GitLab + Bitbucket + ZIP upload
-- [x] **CBOM export** — CycloneDX 1.7 format
-- [x] **BYOK** — Bring Your Own Anthropic/OpenAI/Gemini key
-- [x] **.NET / C# detection** — `System.Security.Cryptography` + BouncyCastle.NET — community contribution
-- [ ] **v1.1** — GitHub Actions client-side scan (code never leaves your infra)
-- [ ] **v1.2** — SBOM publishing + reproducible builds
-- [ ] **v1.3** — DORA / NIS2 / ISO 27001 compliance mapping per finding + LATAM (LGPD, BACEN)
-
-Contributions wanted:
-
-- Language patterns: Go (`crypto/rsa`, `x/crypto`), Java (Bouncy Castle, `javax.crypto`)
-- LATAM compliance mappings: BACEN 4.658, LGPD Art. 46, SFC Colombia, CNBV Mexico
-
-Open an issue with label `language-patterns` or `compliance-mapping` to start.
-
-## Contributors
-
-Thanks to everyone who has contributed code or patterns to scanner-core:
-
-- [@ChisaTocris](https://github.com/ChisaTocris) — .NET / C# detection patterns + BouncyCastle.NET
-
-## Compliance
-
-- **DORA** — Article 50 cryptographic risk management
-- **NIS2** — EU Network and Information Systems Directive
-- **NIST PQC** — FIPS 203/204/205
-- **ISO 27001** — Annex A.10 (cryptographic controls)
-- **SOC 2** — CC6.7
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome. Most useful right now:
+Most useful right now:
 
-- Reporting false positives or missed patterns
-- Adding language-specific detection rules
-- Reviewing the threat model and architecture
+- **Go patterns** — `crypto/rsa`, `x/crypto`, `golang.org/x/crypto` (`good first issue` label)
+- **Java patterns** — Bouncy Castle, `javax.crypto`
+- **LATAM compliance mappings** — BACEN 4.658, LGPD Art. 46, SFC Colombia, CNBV Mexico
+- **False positive reports** — run the scanner on your codebase and tell us what's wrong
+
+Open an issue with label `language-patterns` or `compliance-mapping`.
+
+```bash
+git clone https://github.com/quantumscan-io/scanner-core.git
+cd scanner-core
+node index.js /path/to/your/project
+```
+
+---
+
+## Contributors
+
+- [@ChisaTocris](https://github.com/ChisaTocris) — C# / .NET patterns: `System.Security.Cryptography` + BouncyCastle.NET
+
+---
+
+## Roadmap
+
+- [x] v1.0 — Core regex engine, 50+ patterns, 12 languages, `npx quantumscan` CLI
+- [x] v1.1 — Dependency scanning (npm, pip, Go, Rust, Maven)
+- [x] v1.2 — SARIF output, `quantumscan-ignore`, `--badge` flag, blockchain patterns (Web3/DeFi)
+- [x] v1.3 — OpenSSL C / Java JCA implementation patterns, coverage disclosure, README.rst support, .NET community contribution
+- [ ] v1.4 — GitHub Actions client-side scan (code never leaves infra)
+- [ ] v1.5 — SBOM publishing + reproducible builds
+- [ ] v2.0 — WASM browser build (zero-server scan from the landing page)
+
+---
+
+## Compliance mapping
+
+| Standard | Requirement |
+|---|---|
+| **NIST FIPS 203/204/205** | Use ML-KEM / ML-DSA / SLH-DSA |
+| **DORA** Art. 50 | Cryptographic risk management for financial entities |
+| **NIS2** Art. 21 | Cryptographic controls for critical infrastructure |
+| **CNSA 2.0** | US NSA mandate — full PQC by 2030 |
+| **ISO 27001** | Annex A.10 cryptographic controls |
+| **SOC 2** | CC6.7 encryption requirements |
+
+---
 
 ## License
 
-[MIT](LICENSE) © 2026 QuantumScan contributors.
+[MIT](LICENSE) © 2026 QuantumScan contributors
+
+---
 
 ## Links
 
-- **Website:** [quantumscan.io](https://quantumscan.io)
+- **SaaS (AI guides, CBOM, DORA PDF):** [quantumscan.io](https://quantumscan.io)
+- **npm:** [npmjs.com/package/quantumscan](https://www.npmjs.com/package/quantumscan)
 - **Ko-fi:** [ko-fi.com/quantumscan](https://ko-fi.com/quantumscan)
 - **LinkedIn:** [linkedin.com/company/quantumscan](https://linkedin.com/company/quantumscan)
-- **Org:** [github.com/quantumscan-io](https://github.com/quantumscan-io)
