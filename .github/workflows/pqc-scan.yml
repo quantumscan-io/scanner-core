@@ -23,8 +23,12 @@ jobs:
         with:
           node-version: "20"
 
+      # index.js IS the pattern database: its regex literals contain the
+      # vulnerable algorithm names they detect, so scanning source code here
+      # always self-matches as 100/100 critical. Only the dependency check
+      # (package.json etc.) is meaningful for this repo.
       - name: Scan for quantum-vulnerable cryptography
-        run: node index.js . --sarif --no-fail > pqc-results.sarif
+        run: node index.js . --sarif --no-code --no-fail > pqc-results.sarif
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3

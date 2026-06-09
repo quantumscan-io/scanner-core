@@ -652,6 +652,7 @@ Options:
   --json             Output results as JSON (for CI/CD pipelines)
   --sarif            Output results as SARIF 2.1.0 (GitHub Security tab)
   --no-deps          Skip dependency scanning (package.json, requirements.txt…)
+  --no-code          Skip source code scanning (only scan dependencies)
   --badge            Print README badge markdown after scan
   --no-fail          Exit 0 even when findings are found (default: exit 1)
   --version          Show version
@@ -687,6 +688,7 @@ function main() {
   const sarifMode = args.includes("--sarif");
   const badgeMode = args.includes("--badge");
   const noDeps    = args.includes("--no-deps");
+  const noCode    = args.includes("--no-code");
   const noFail    = args.includes("--no-fail");
   const pathArg   = args.find(a => !a.startsWith("-")) ?? ".";
 
@@ -712,7 +714,7 @@ function main() {
   }
 
   const scannableFiles  = allFiles.filter(f => SCANNABLE_EXTS.has(extname(f).toLowerCase()));
-  const codeFindings    = scannableFiles.flatMap(f => scanFile(f, targetDir));
+  const codeFindings    = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir));
   const depFindings     = noDeps ? [] : scanDependencies(targetDir);
   const allFindings     = [...codeFindings, ...depFindings];
   const score           = calcScore(allFindings);
