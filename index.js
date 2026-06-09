@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -96,6 +96,15 @@ const PATTERNS = [
   { id: "java-jca-keyagree",   name: "Java JCA KeyAgreement ECDH/DH",   sev: "high", re: /KeyAgreement\.getInstance\s*\(\s*["'](?:ECDH|DH|ECMQV)["']/i,                                                                            alt: "ML-KEM-768 (NIST FIPS 203)" },
   { id: "node-crypto-keygen",  name: "Node.js crypto.generateKeyPair",   sev: "high", re: /crypto\.generateKeyPair(?:Sync)?\s*\(\s*["'](?:rsa|ec|dsa|ed25519|x25519)["']/i,                                                         alt: "await Web Crypto + liboqs-js for ML-KEM/ML-DSA" },
   { id: "node-crypto-ecdh",    name: "Node.js crypto.createECDH",        sev: "high", re: /crypto\.createECDH\s*\(/i,                                                                                                                alt: "ML-KEM-768 via liboqs-js" },
+  // HIGH — extended language / framework coverage (2026-06-09 v1.4.0)
+  { id: "python-hazmat-rsa",  name: "Python hazmat RSA/DSA/DH keygen",  sev: "high", re: /(?:rsa|dsa|dh)\.generate_(?:private_key|parameters)\s*\(/i,                                                                                           alt: "ML-KEM-768 or ML-DSA-65 via pqcrypto package \(NIST FIPS 203/204\)" },
+  { id: "python-hazmat-ec",   name: "Python hazmat EC keygen",           sev: "high", re: /ec\.generate_private_key\s*\(/i,                                                                                                                          alt: "ML-DSA-65 \(NIST FIPS 204\) for signatures; ML-KEM-768 for KEM" },
+  { id: "swift-seckey",       name: "Swift/iOS SecKey RSA/ECDSA keygen", sev: "high", re: /SecKeyCreateRandomKey\s*\(|kSecAttrKeyTypeRSA\b|kSecAttrKeyTypeECSECPrimeRandom\b|SecKeyGeneratePair\s*\(/i,                                              alt: "Monitor Apple CryptoKit PQC roadmap" },
+  { id: "csharp-rsa-create",  name: "C# RSA.Create / ECDsa.Create",      sev: "high", re: /\bRSA\.Create\s*\(|\bECDsa\.Create\s*\(|\bDSA\.Create\s*\(/i,                                                                                            alt: "ML-KEM-768 or ML-DSA-65 via NIST FIPS 203/204" },
+  { id: "php-openssl-asym",   name: "PHP openssl asymmetric ops",        sev: "high", re: /openssl_sign\s*\(|openssl_verify\s*\(|openssl_private_encrypt\s*\(|openssl_public_decrypt\s*\(/i,                                                         alt: "Await PHP PQC ext; short-term: use HMAC-SHA256 for integrity" },
+  { id: "aws-s2n-tls",        name: "AWS s2n-tls classical TLS conn",    sev: "high", re: /s2n_connection_new\s*\(|s2n_config_new\s*\(|s2n_cipher_preferences|s2n_send\s*\(|s2n_recv\s*\(/i,                                                        alt: "Enable ML-KEM via AWS-LC: S2N_TLS_KEM_GROUP_X25519_KYBER_512_R3" },
+  { id: "openssh-sshkey-gen", name: "OpenSSH C sshkey_generate",         sev: "high", re: /sshkey_generate\s*\(|sshkey_ecdsa_new\s*\(|sshkey_dsa_generate\s*\(|KEX_CLIENT_ENCRYPT\b/i,                                                              alt: "Set KexAlgorithms mlkem768x25519-sha256 in sshd_config" },
+  { id: "rustls-config",      name: "rustls classical TLS ClientConfig", sev: "high", re: /rustls::(?:Client|Server)Config::builder\s*\(|ClientConnection::new\s*\(|RootCertStore::empty\s*\(\)/i,                                                   alt: "Monitor rustls PQC roadmap; use aws-lc-rs provider for ML-KEM hybrid" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i },
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" },
