@@ -1,0 +1,58 @@
+name: 💡 Suggest a crypto pattern to detect
+description: Propose a new quantum-vulnerable (or PQC-related) pattern for the scanner
+title: "[pattern] "
+labels: ["enhancement", "language-patterns"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an algorithm, library call, or config that scanner-core should detect
+        (e.g. a classical algorithm broken by Shor's algorithm, or a PQC migration hint
+        like ML-KEM/Kyber/Dilithium/Falcon/SLH-DSA).
+
+  - type: input
+    id: name
+    attributes:
+      label: Algorithm / library call
+      placeholder: "e.g. Falcon-512 signature verification (liboqs binding)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Classical asymmetric crypto (RSA/DSA/DH) — quantum-vulnerable
+        - Elliptic curve crypto (ECDSA/ECDH/EdDSA) — quantum-vulnerable
+        - Weak hash/cipher (MD5/SHA-1/DES/RC4) — classically weak
+        - TLS/SSH config — classical-only key exchange
+        - Post-quantum algorithm (ML-KEM/ML-DSA/SLH-DSA/Kyber/Dilithium/Falcon) — coverage hint
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language / ecosystem
+      placeholder: "e.g. Rust (liboqs-rust), Java (Bouncy Castle PQC), Python (oqs-python)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code that should match
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: regex
+    attributes:
+      label: Suggested regex (optional)
+      description: If you already have a pattern in mind, share it — see CONTRIBUTING.md for the format
+      render: js
+    validations:
+      required: false

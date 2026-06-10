@@ -1,0 +1,51 @@
+name: 🐛 False positive report
+description: The scanner flagged something that isn't actually quantum-vulnerable
+title: "[false positive] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve detection accuracy. Please fill in as much as you can.
+
+  - type: input
+    id: rule-id
+    attributes:
+      label: Rule ID
+      description: The pattern ID from the finding (e.g. `ecdsa-keygen`, `php-openssl-asym`)
+      placeholder: ecdsa-keygen
+    validations:
+      required: true
+
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Code snippet that triggered the finding
+      description: Paste the exact line(s) that matched
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language / framework
+      placeholder: "e.g. Python + cryptography lib, or just a comment/docstring"
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is this not actually quantum-vulnerable crypto?
+      description: e.g. "this is inside a comment", "this is a test fixture", "this string is not a key generation call"
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Link to the repo/file (if public)
+      placeholder: "https://github.com/owner/repo/blob/main/path/to/file"
+    validations:
+      required: false
