@@ -7,13 +7,11 @@ Thanks for your interest. Contributions take 3 forms:
 Add or improve detection patterns for a language. No crypto expertise needed.
 
 **Open issues ready to pick up:**
-- [Go patterns — crypto/rsa, x/crypto](https://github.com/quantumscan-io/scanner-core/issues/1)
-- [Java/Kotlin — Bouncy Castle, javax.crypto](https://github.com/quantumscan-io/scanner-core/issues/2)
-- [.NET / C# — System.Security.Cryptography](https://github.com/quantumscan-io/scanner-core/issues/3)
+- See all [`good first issue`](https://github.com/quantumscan-io/scanner-core/labels/good%20first%20issue) issues — usually one per language with missing pattern coverage
 
-Pattern format (in `src/index.js`):
+Pattern format (in `index.js`):
 ```js
-{ pattern: /RSA\.generate\(/gi, severity: 'HIGH', algorithm: 'RSA', pqcAlternative: 'ML-KEM (FIPS 203)' }
+{ id: "ruby-openssl-rsa", name: "Ruby OpenSSL RSA/EC keygen", sev: "high", re: /OpenSSL::PKey::(?:RSA|EC)\.(?:new|generate)\s*\(/i, alt: "Migrate to ML-KEM (FIPS 203) / ML-DSA (FIPS 204) when available" }, // quantumscan-ignore
 ```
 
 ## 2. False positives / missed detections
