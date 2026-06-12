@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.4.0";
+const VERSION = "1.4.1";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -105,6 +105,12 @@ const PATTERNS = [
   { id: "aws-s2n-tls",        name: "AWS s2n-tls classical TLS conn",    sev: "high", re: /s2n_connection_new\s*\(|s2n_config_new\s*\(|s2n_cipher_preferences|s2n_send\s*\(|s2n_recv\s*\(/i,                                                        alt: "Enable ML-KEM via AWS-LC: S2N_TLS_KEM_GROUP_X25519_KYBER_512_R3" }, // quantumscan-ignore
   { id: "openssh-sshkey-gen", name: "OpenSSH C sshkey_generate",         sev: "high", re: /sshkey_generate\s*\(|sshkey_ecdsa_new\s*\(|sshkey_dsa_generate\s*\(|KEX_CLIENT_ENCRYPT\b/i,                                                              alt: "Set KexAlgorithms mlkem768x25519-sha256 in sshd_config" }, // quantumscan-ignore
   { id: "rustls-config",      name: "rustls classical TLS ClientConfig", sev: "high", re: /rustls::(?:Client|Server)Config::builder\s*\(|ClientConnection::new\s*\(|RootCertStore::empty\s*\(\)/i,                                                   alt: "Monitor rustls PQC roadmap; use aws-lc-rs provider for ML-KEM hybrid" }, // quantumscan-ignore
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-12
+  { id: "google-tink-ecdsa", name: "Google Tink ECDSA signature", sev: "high", re: /EcdsaSignKeyManager|EcdsaVerifyKeyManager|ECDSA_P256|ECDSA_P384|ECDSA_P521|EcdsaPrivateKey|KeysetHandle\.generateNew\s*\(\s*EcdsaSign|register(?:Ecdsa|ECDSA)|TinkProtoParametersFormat.*ecdsa/i, alt: "ML-DSA-65 or SLH-DSA (NIST FIPS 204/205) via liboqs or Tink PQC fork" },
+  { id: "aws-kms-rsa-classical", name: "AWS KMS RSA/ECC key operations", sev: "high", re: /CreateKey.*KeySpec.*(?:RSA_2048|RSA_3072|RSA_4096|ECC_NIST_P256|ECC_NIST_P384|ECC_NIST_P521|ECC_SECG_P256K1)|KeyUsage.*SIGN_VERIFY.*(?:RSA|ECDSA)|GetPublicKey.*(?:RSA|ECC)|aws-kms.*KeySpec.*(?:RSA|ECC)/i, alt: "AWS KMS post-quantum TLS (when available) or client-side ML-KEM/ML-DSA" },
+  { id: "ruby-openssl-rsa-ecdsa", name: "Ruby OpenSSL RSA/ECDSA key generation", sev: "high", re: /OpenSSL::PKey::RSA\.(?:new|generate)|OpenSSL::PKey::EC\.(?:new|generate)|OpenSSL::PKey::DSA\.(?:new|generate)|rsa\.generate_key|ec\.generate_key/i, alt: "Post-quantum signatures via experimental Ruby bindings to liboqs" },
+  { id: "azure-keyvault-rsa-ec", name: "Azure Key Vault RSA/EC key operations", sev: "high", re: /CreateRsaKey|CreateEcKey|KeyVaultKey.*Rsa|KeyVaultKey.*Ec|JsonWebKey.*Kty.*(?:RSA|EC)|beginCreateKey.*(?:Rsa|Ec)|KeyType\.(?:RSA|EC)/i, alt: "Azure confidential computing with post-quantum readiness or hybrid solutions" },
+  { id: "kotlin-java-security-rsa-ec", name: "Kotlin/Java Security RSA/EC keygen", sev: "high", re: /KeyPairGenerator\.getInstance\s*\(\s*['"](?:RSA|EC|ECDSA|ECDH)['"]|Signature\.getInstance\s*\(\s*['"](?:SHA\d+withRSA|SHA\d+withECDSA|NONEwithRSA)['"]|KeyFactory\.getInstance\s*\(\s*['"](?:RSA|EC)['"]/i, alt: "BouncyCastle PQC provider with ML-DSA or SLH-DSA" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
