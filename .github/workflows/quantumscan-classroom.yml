@@ -25,7 +25,9 @@ jobs:
         id: submit
         run: |
           REPO="${{ github.repository }}"
-          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan             -H "Content-Type: application/json"             -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
+          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan \
+            -H "Content-Type: application/json" \
+            -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
           SCAN_ID=$(echo "$RESPONSE" | grep -o '"scanId":"[^"]*"' | head -1 | cut -d'"' -f4)
           echo "scan_id=${SCAN_ID}" >> "$GITHUB_OUTPUT"
           echo "Scan submitted: ${SCAN_ID}"
@@ -103,8 +105,7 @@ jobs:
               '',
               `---`,
               `*Powered by [QuantumScan](https://quantumscan.io) — free PQC auditing for education*`,
-            ].join('
-');
+            ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
