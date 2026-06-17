@@ -1,0 +1,121 @@
+name: QuantumScan · PQC Audit
+
+# GitHub Classroom template workflow.
+# Copy this file to .github/workflows/quantumscan.yml in your assignment repo.
+# Students get a PQC risk score on every push — no account required.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pqc-audit:
+    name: Post-Quantum Cryptography Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submit repo for PQC scan
+        id: submit
+        run: |
+          REPO="${{ github.repository }}"
+          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan \
+            -H "Content-Type: application/json" \
+            -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
+          SCAN_ID=$(echo "$RESPONSE" | grep -o '"scanId":"[^"]*"' | cut -d'"' -f4)
+          echo "scan_id=${SCAN_ID}" >> "$GITHUB_OUTPUT"
+          echo "Scan submitted: ${SCAN_ID}"
+
+      - name: Wait for results (up to 3 minutes)
+        id: results
+        run: |
+          SCAN_ID="${{ steps.submit.outputs.scan_id }}"
+          if [ -z "$SCAN_ID" ]; then
+            echo "status=error" >> "$GITHUB_OUTPUT"
+            echo "risk_score=N/A" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for i in $(seq 1 18); do
+            sleep 10
+            RESULT=$(curl -s "https://quantumscan.io/api/scan/${SCAN_ID}")
+            STATUS=$(echo "$RESULT" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            echo "Attempt $i: status=${STATUS}"
+            if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+              SCORE=$(echo "$RESULT" | grep -o '"riskScore":[0-9]*' | cut -d':' -f2)
+              VULNS=$(echo "$RESULT" | grep -o '"vulnerableFiles":[0-9]*' | cut -d':' -f2)
+              TOTAL=$(echo "$RESULT" | grep -o '"totalFiles":[0-9]*' | cut -d':' -f2)
+              echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+              echo "risk_score=${SCORE:-0}" >> "$GITHUB_OUTPUT"
+              echo "vulnerable_files=${VULNS:-0}" >> "$GITHUB_OUTPUT"
+              echo "total_files=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
+              echo "scan_url=https://quantumscan.io/en/scan/${SCAN_ID}" >> "$GITHUB_OUTPUT"
+              break
+            fi
+          done
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const score = parseInt('${{ steps.results.outputs.risk_score }}') || 0;
+            const vulns = '${{ steps.results.outputs.vulnerable_files }}' || '0';
+            const total = '${{ steps.results.outputs.total_files }}' || '0';
+            const url = '${{ steps.results.outputs.scan_url }}';
+            const status = '${{ steps.results.outputs.status }}';
+
+            let badge, summary;
+            if (status === 'completed') {
+              if (score >= 80) {
+                badge = '🔴 CRITICAL';
+                summary = 'Quantum-vulnerable cryptography found. Migrate to ML-KEM / ML-DSA before 2030.';
+              } else if (score >= 50) {
+                badge = '🟠 HIGH';
+                summary = 'Significant quantum risk detected. Review findings and plan migration.';
+              } else if (score >= 20) {
+                badge = '🟡 MEDIUM';
+                summary = 'Some quantum-vulnerable patterns found. Consider migration in next sprint.';
+              } else {
+                badge = '🟢 LOW';
+                summary = 'No critical quantum vulnerabilities found. Good baseline hygiene.';
+              }
+            } else {
+              badge = '⚪ PENDING';
+              summary = 'Scan did not complete in time. Visit the dashboard for manual results.';
+            }
+
+            const body = [
+              `## ${badge} — QuantumScan PQC Audit`,
+              '',
+              `| Metric | Value |`,
+              `|--------|-------|`,
+              `| Risk score | **${score}/100** |`,
+              `| Vulnerable files | ${vulns} / ${total} |`,
+              `| Status | ${status || 'timeout'} |`,
+              '',
+              summary,
+              '',
+              url ? `[View full report →](${url})` : '',
+              '',
+              `---`,
+              `*Powered by [QuantumScan](https://quantumscan.io) — free PQC auditing for education*`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Fail on critical risk
+        if: steps.results.outputs.risk_score != '' && steps.results.outputs.risk_score >= 80
+        run: |
+          echo "::error::Risk score ${{ steps.results.outputs.risk_score }}/100 exceeds threshold (80). Review PQC findings."
+          exit 1
