@@ -25,10 +25,8 @@ jobs:
         id: submit
         run: |
           REPO="${{ github.repository }}"
-          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan \
-            -H "Content-Type: application/json" \
-            -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
-          SCAN_ID=$(echo "$RESPONSE" | grep -o '"scanId":"[^"]*"' | cut -d'"' -f4)
+          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan             -H "Content-Type: application/json"             -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
+          SCAN_ID=$(echo "$RESPONSE" | grep -o '"scanId":"[^"]*"' | head -1 | cut -d'"' -f4)
           echo "scan_id=${SCAN_ID}" >> "$GITHUB_OUTPUT"
           echo "Scan submitted: ${SCAN_ID}"
 
@@ -38,18 +36,18 @@ jobs:
           SCAN_ID="${{ steps.submit.outputs.scan_id }}"
           if [ -z "$SCAN_ID" ]; then
             echo "status=error" >> "$GITHUB_OUTPUT"
-            echo "risk_score=N/A" >> "$GITHUB_OUTPUT"
+            echo "risk_score=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           for i in $(seq 1 18); do
             sleep 10
             RESULT=$(curl -s "https://quantumscan.io/api/scan/${SCAN_ID}")
-            STATUS=$(echo "$RESULT" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            STATUS=$(echo "$RESULT" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
             echo "Attempt $i: status=${STATUS}"
             if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
-              SCORE=$(echo "$RESULT" | grep -o '"riskScore":[0-9]*' | cut -d':' -f2)
-              VULNS=$(echo "$RESULT" | grep -o '"vulnerableFiles":[0-9]*' | cut -d':' -f2)
-              TOTAL=$(echo "$RESULT" | grep -o '"totalFiles":[0-9]*' | cut -d':' -f2)
+              SCORE=$(echo "$RESULT" | grep -o '"riskScore":[0-9]*' | head -1 | cut -d':' -f2)
+              VULNS=$(echo "$RESULT" | grep -o '"vulnerableFiles":[0-9]*' | head -1 | cut -d':' -f2)
+              TOTAL=$(echo "$RESULT" | grep -o '"totalFiles":[0-9]*' | head -1 | cut -d':' -f2)
               echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
               echo "risk_score=${SCORE:-0}" >> "$GITHUB_OUTPUT"
               echo "vulnerable_files=${VULNS:-0}" >> "$GITHUB_OUTPUT"
@@ -105,7 +103,8 @@ jobs:
               '',
               `---`,
               `*Powered by [QuantumScan](https://quantumscan.io) — free PQC auditing for education*`,
-            ].join('\n');
+            ].join('
+');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -115,7 +114,7 @@ jobs:
             });
 
       - name: Fail on critical risk
-        if: steps.results.outputs.risk_score != '' && steps.results.outputs.risk_score >= 80
+        if: steps.results.outputs.risk_score != '' && fromJSON(steps.results.outputs.risk_score) >= 80
         run: |
           echo "::error::Risk score ${{ steps.results.outputs.risk_score }}/100 exceeds threshold (80). Review PQC findings."
           exit 1
