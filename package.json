@@ -1,7 +1,7 @@
 {
   "name": "quantumscan",
-  "version": "1.4.2",
-  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase",
+  "version": "1.5.0",
+  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase and Solidity smart contracts",
   "keywords": [
     "post-quantum",
     "cryptography",
@@ -22,7 +22,13 @@
     "static-analysis",
     "github",
     "gitlab",
-    "bitbucket"
+    "bitbucket",
+    "solidity",
+    "smart-contracts",
+    "defi",
+    "ethereum",
+    "eip712",
+    "blockchain"
   ],
   "type": "module",
   "bin": {

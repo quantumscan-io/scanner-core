@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.4.2";
+const VERSION = "1.5.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -78,6 +78,12 @@ const PATTERNS = [
   { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey/i, alt: "Monitor TRON PQC roadmap" }, // quantumscan-ignore
   { id: "bls12-381",           name: "BLS12-381 pairing curve",           sev: "high", re: /\bbls12[_-]381\b|G1Affine\b|G2Affine\b|G1Projective\b|G2Projective\b|bls\.sign\s*\(|bls\.verify\s*\(|bls\.aggregateVerify\s*\(|pairing\s*\(\s*&?G[12]|from_compressed\s*\(\)|Gt::generator\s*\(/i, alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
   { id: "ed25519-dalek-rust",  name: "ed25519-dalek Rust crate usage",    sev: "high", re: /ed25519_dalek::(?:Keypair|SigningKey|VerifyingKey|SecretKey|Signature|ExpandedSecretKey)|SigningKey::from_bytes\s*\(|ExpandedSecretKey::from\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" }, // quantumscan-ignore
+  // HIGH — Solidity / DeFi PQC patterns (v1.5.0 — QuantumScan for DeFi)
+  { id: "solidity-eip712",         name: "Solidity EIP-712 typed data sig (secp256k1)",  sev: "high", re: /\b_hashTypedDataV4\s*\(|EIP712\b|DOMAIN_SEPARATOR\b|_DOMAIN_SEPARATOR\b|_buildDomainSeparator\s*\(|eip712Domain\s*\(|hashTypedDataV4\s*\(/i,                                             alt: "Monitor EVM PQC precompile proposals — no quantum-safe EIP-712 standard yet" }, // quantumscan-ignore
+  { id: "solidity-assembly-ecr",   name: "Solidity assembly ecrecover precompile (0x1)", sev: "high", re: /staticcall\s*\([^,)]*,\s*(?:0x0*1|1)\s*,|signer\s*:=\s*mload\s*\(|recovered\s*:=\s*mload\s*\(|let\s+signer\s*:=\s*(?:ecrecover|mload)/i,                                              alt: "Monitor EIP for PQC signature precompile replacement" }, // quantumscan-ignore
+  { id: "solidity-oracle-chainlink",name: "Chainlink oracle (secp256k1 ECDSA DON)",     sev: "high", re: /\bAggregatorV3Interface\b|latestRoundData\s*\(|ChainlinkClient\b|buildChainlinkRequest\s*\(|sendChainlinkRequestTo\s*\(|VRFConsumerBase\b|VRFConsumerBaseV2\b|requestRandomness\s*\(/i,  alt: "Monitor Chainlink PQC roadmap — DON uses secp256k1 threshold signatures" }, // quantumscan-ignore
+  { id: "solidity-permit-eip2612", name: "ERC-2612 permit() gasless approval (ECDSA)",  sev: "high", re: /\bERC20Permit\b|\bIERC20Permit\b|\bERC2612\b|function\s+permit\s*\(\s*address\s+(?:owner|spender)|\bDAI_DOMAIN_SEPARATOR\b/i,                                                              alt: "No PQC permit standard yet — signature-based approvals will break post-quantum" }, // quantumscan-ignore
+  { id: "solidity-multisig-ecdsa", name: "Gnosis Safe / MultiSig ECDSA (N-of-M keys)", sev: "high", re: /\bGnosisSafe\b|\bMultiSigWallet\b|checkNSignatures\s*\(|execTransaction\s*\(|isValidSignature\s*\(|signatureToAddress\s*\(|_checkSignatures\s*\(|SafeSignature\b|ISafe\b/i,               alt: "Monitor Safe{Wallet} PQC migration — each signer key is Shor-vulnerable" }, // quantumscan-ignore
   // HIGH — Java JCA / SSH library false-negative fixes (2026-06-04)
   { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
   { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" }, // quantumscan-ignore
@@ -133,6 +139,11 @@ const VULNERABLE_DEPS = [
   { pkg: "@noble/curves",    eco: "npm",    sev: "high",     reason: "ECC curves including secp256k1 and P-256",  alt: "ml-kem / ml-dsa" }, // quantumscan-ignore
   { pkg: "@noble/bls12-381",eco: "npm",    sev: "high",     reason: "BLS12-381 pairing curve (quantum-vulnerable)", alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
   { pkg: "bls-eth-wasm",    eco: "npm",    sev: "high",     reason: "Ethereum BLS12-381 validator signatures",   alt: "Monitor Ethereum PQC roadmap (EIP-7786)" }, // quantumscan-ignore
+  // Solidity / DeFi ecosystem
+  { pkg: "@openzeppelin/contracts",            eco: "npm", sev: "high",   reason: "ECDSA.sol / EIP712.sol / SignatureChecker.sol — secp256k1 signature verification", alt: "Monitor OpenZeppelin PQC contracts — no drop-in replacement yet" }, // quantumscan-ignore
+  { pkg: "@openzeppelin/contracts-upgradeable",eco: "npm", sev: "high",   reason: "Upgradeable ECDSA/EIP712 contracts — same quantum exposure",                       alt: "Monitor OpenZeppelin PQC contracts" }, // quantumscan-ignore
+  { pkg: "@chainlink/contracts",               eco: "npm", sev: "high",   reason: "Chainlink oracle interfaces — DON aggregation uses secp256k1 ECDSA",               alt: "Monitor Chainlink PQC roadmap" }, // quantumscan-ignore
+  { pkg: "@safe-global/safe-contracts",        eco: "npm", sev: "high",   reason: "Gnosis Safe — N-of-M secp256k1 ECDSA multi-sig verification",                     alt: "Monitor Safe{Wallet} PQC migration" }, // quantumscan-ignore
   { pkg: "jose",             eco: "npm",    sev: "medium",   reason: "Supports RS256/ES256 JWT algorithms",       alt: "Use HS256 only until PQC JOSE RFC" }, // quantumscan-ignore
   { pkg: "jsonwebtoken",     eco: "npm",    sev: "medium",   reason: "RS256/ES256 JWT by default",                alt: "Use HS256 algorithms only" }, // quantumscan-ignore
   { pkg: "ssh2",             eco: "npm",    sev: "high",     reason: "RSA/ECDSA SSH host keys",                   alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
