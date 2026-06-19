@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.4.1";
+const VERSION = "1.4.2";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -76,6 +76,8 @@ const PATTERNS = [
   { id: "coincurve-secp256k1", name: "coincurve / python-bitcoin",        sev: "high", re: /import\s+coincurve\b|coincurve\.(?:PublicKey|PrivateKey)|from\s+bitcoinlib\s+import.*(?:Key|sign)/i, alt: "ML-DSA (CRYSTALS-Dilithium)" }, // quantumscan-ignore
   { id: "rust-secp256k1-crate",name: "Rust secp256k1 / k256 crate",      sev: "high", re: /use\s+secp256k1::|use\s+k256::|Secp256k1::new\s*\(|SecretKey::from_slice\s*\(|SigningKey::from_bytes\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" }, // quantumscan-ignore
   { id: "tronweb-wallet",      name: "TronWeb wallet (secp256k1)",        sev: "high", re: /TronWeb\.createAccount\s*\(|tronWeb\.createAccount|tronWeb\.address\.fromPrivateKey/i, alt: "Monitor TRON PQC roadmap" }, // quantumscan-ignore
+  { id: "bls12-381",           name: "BLS12-381 pairing curve",           sev: "high", re: /\bbls12[_-]381\b|G1Affine\b|G2Affine\b|G1Projective\b|G2Projective\b|bls\.sign\s*\(|bls\.verify\s*\(|bls\.aggregateVerify\s*\(|pairing\s*\(\s*&?G[12]|from_compressed\s*\(\)|Gt::generator\s*\(/i, alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
+  { id: "ed25519-dalek-rust",  name: "ed25519-dalek Rust crate usage",    sev: "high", re: /ed25519_dalek::(?:Keypair|SigningKey|VerifyingKey|SecretKey|Signature|ExpandedSecretKey)|SigningKey::from_bytes\s*\(|ExpandedSecretKey::from\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" }, // quantumscan-ignore
   // HIGH — Java JCA / SSH library false-negative fixes (2026-06-04)
   { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
   { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" }, // quantumscan-ignore
@@ -129,6 +131,8 @@ const VULNERABLE_DEPS = [
   { pkg: "@noble/secp256k1", eco: "npm",    sev: "high",     reason: "secp256k1 (Shor-vulnerable)",               alt: "ml-dsa" }, // quantumscan-ignore
   { pkg: "noble-secp256k1",  eco: "npm",    sev: "high",     reason: "secp256k1",                                 alt: "ml-dsa" }, // quantumscan-ignore
   { pkg: "@noble/curves",    eco: "npm",    sev: "high",     reason: "ECC curves including secp256k1 and P-256",  alt: "ml-kem / ml-dsa" }, // quantumscan-ignore
+  { pkg: "@noble/bls12-381",eco: "npm",    sev: "high",     reason: "BLS12-381 pairing curve (quantum-vulnerable)", alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
+  { pkg: "bls-eth-wasm",    eco: "npm",    sev: "high",     reason: "Ethereum BLS12-381 validator signatures",   alt: "Monitor Ethereum PQC roadmap (EIP-7786)" }, // quantumscan-ignore
   { pkg: "jose",             eco: "npm",    sev: "medium",   reason: "Supports RS256/ES256 JWT algorithms",       alt: "Use HS256 only until PQC JOSE RFC" }, // quantumscan-ignore
   { pkg: "jsonwebtoken",     eco: "npm",    sev: "medium",   reason: "RS256/ES256 JWT by default",                alt: "Use HS256 algorithms only" }, // quantumscan-ignore
   { pkg: "ssh2",             eco: "npm",    sev: "high",     reason: "RSA/ECDSA SSH host keys",                   alt: "Monitor OpenSSH PQC roadmap" }, // quantumscan-ignore
@@ -160,6 +164,8 @@ const VULNERABLE_DEPS = [
   { pkg: "ed25519-dalek",    eco: "rust",   sev: "high",     reason: "Ed25519 (Shor-vulnerable)",                alt: "ML-DSA via pqcrypto-dilithium" }, // quantumscan-ignore
   { pkg: "x25519-dalek",     eco: "rust",   sev: "high",     reason: "X25519 key exchange (Shor-vulnerable)",    alt: "ML-KEM via pqcrypto-kyber" }, // quantumscan-ignore
   { pkg: "ring",             eco: "rust",   sev: "high",     reason: "ring crate — RSA/ECDSA/ECDH operations",   alt: "pqcrypto-kyber for KEM; pqcrypto-dilithium for signatures" }, // quantumscan-ignore
+  { pkg: "bls12-381",       eco: "rust",   sev: "high",     reason: "BLS12-381 pairing curve (quantum-vulnerable)", alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
+  { pkg: "bls_signatures",  eco: "rust",   sev: "high",     reason: "BLS signatures over BLS12-381",             alt: "ML-DSA (NIST FIPS 204) for non-aggregation use cases" }, // quantumscan-ignore
 ];
 
 const SCANNABLE_EXTS = new Set([
