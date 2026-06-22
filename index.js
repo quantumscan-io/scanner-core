@@ -1,10 +1,9 @@
-#!/usr/bin/env node
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.7.0";
+const VERSION = "1.8.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -146,6 +145,14 @@ const PATTERNS = [
   { id: "go-ecdsa-sign",       name: "Go stdlib ecdsa.Sign / ecdsa.Verify",              sev: "high", re: /ecdsa\.Sign\s*\(|ecdsa\.Verify\s*\(|ecdsa\.SignASN1\s*\(|ecdsa\.VerifyASN1\s*\(/i,                                                                                                                  alt: "ML-DSA-65 via golang.org/x/crypto (NIST FIPS 204)" }, // quantumscan-ignore
   { id: "java-keystore-load",  name: "Java KeyStore PKCS12/JKS RSA key loading",         sev: "high", re: /KeyStore\.getInstance\s*\(\s*["'](?:PKCS12|JKS|BKS|Windows-MY)["']\s*\)|KeyStore\.load\s*\(|ks\.getKey\s*\(|keyStore\.aliases\s*\(\)/i,                                                            alt: "Migrate to PQC keys via Bouncy Castle bcpqc; PKCS12 format supports ML-DSA" }, // quantumscan-ignore
   { id: "rust-native-tls",     name: "Rust native-tls / openssl crate TLS",              sev: "high", re: /use\s+native_tls::|use\s+openssl::(?:ssl|rsa|ec|dsa|pkey)::|TlsConnector::(?:builder|new)\s*\(\s*\)|TlsAcceptor::(?:builder|new)\s*\(\s*\)|SslMethod::tls\s*\(\s*\)/i,                             alt: "Migrate to rustls with aws-lc-rs or oqs-provider for ML-KEM hybrid TLS" }, // quantumscan-ignore
+  { id: "python-paramiko",    name: "Python Paramiko SSH",                    sev: "high", re: /paramiko\.(?:RSAKey|ECDSAKey|DSSKey|Ed25519Key)\.generate|paramiko\.(?:SSHClient|Transport)\(|from paramiko import|import paramiko/i, alt: "OpenSSH mlkem768x25519-sha256 (when Paramiko adds PQC KEM)" }, // quantumscan-ignore
+  { id: "ruby-openssl-pkey",  name: "Ruby OpenSSL PKey RSA/EC/DSA",           sev: "high", re: /OpenSSL::PKey::(?:RSA|EC|DSA)\.(?:new|generate)|OpenSSL::SSL::SSLContext\.new|require\s+[\'"]openssl[\'"].*PKey/i, alt: "openssl-oqs gem (ML-KEM / ML-DSA) or Ruby oqs-provider" }, // quantumscan-ignore
+  { id: "terraform-tls-key",  name: "Terraform tls_private_key RSA/ECDSA",   sev: "high", re: /resource\s+["'"]tls_private_key["'"]|algorithm\s*=\s*["'"](?:RSA|ECDSA|DSA)["'"]|tls_self_signed_cert|tls_locally_signed_cert/i, alt: "Await HashiCorp tls provider PQC support; use external_provider with openssl-oqs" }, // quantumscan-ignore
+  { id: "nodejs-crypto-asym", name: "Node.js crypto asymmetric ops",           sev: "high", re: /crypto\.createECDH\s*\(|generateKeyPairSync\s*\(\s*['\"](?:rsa|ec|dsa|ed25519|x25519)['\"]|crypto\.createSign\s*\(|createDiffieHellman\s*\(/i, alt: "Node.js crypto.generateKeyPairSync with ML-KEM-768 via oqs-node binding" }, // quantumscan-ignore
+  { id: "java-bc-pem-io",     name: "Bouncy Castle PEM I/O",                  sev: "high", re: /PEMParser\s*\(|PEMKeyPair|JcaPEMKeyConverter|JcaPKCS8Generator|PKCS8Generator|PemWriter|JcaPEMWriter/i, alt: "Bouncy Castle bcpqc-jdk18on: ML-DSA / ML-KEM PKCS12 support" }, // quantumscan-ignore
+  { id: "dart-pointycastle",  name: "Dart pointycastle RSA/EC",               sev: "high", re: /(?:package:pointycastle|RSAKeyGenerationParameters|ECKeyGeneratorParameters|RSAPrivateKey\s*\(|ECPrivateKey\s*\(|AsymmetricKeyPair<(?:RSA|EC))/i, alt: "package:cryptography with ML-KEM-768 (liboqs FFI) when Dart binding lands" }, // quantumscan-ignore
+  { id: "go-rsa-ops",         name: "Go crypto/rsa operations",               sev: "high", re: /rsa\.GenerateMultiPrimeKey|rsa\.DecryptPKCS1v15|rsa\.SignPSS\s*\(|rsa\.EncryptOAEP\s*\(|rsa\.DecryptOAEP\s*\(|rsa\.EncryptPKCS1v15/i, alt: "ML-KEM-768 (FIPS 203) via golang.org/x/crypto/mlkem or cloudflare/circl" }, // quantumscan-ignore
+  { id: "python-x509-builder",name: "Python cryptography x509 cert builder",  sev: "high", re: /x509\.CertificateBuilder\(\)|x509\.load_pem_x509_certificate|x509\.load_der_x509_certificate|CertificateRevocationListBuilder|x509\.NameAttribute\s*\(|\.sign\s*\(.*hashes\.SHA/i, alt: "Await pyca/cryptography ML-DSA cert support (draft-ietf-lamps-dilithium-certificates)" }, // quantumscan-ignore
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
