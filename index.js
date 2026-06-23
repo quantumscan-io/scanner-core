@@ -1,4 +1,3 @@
-import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
@@ -33,7 +32,7 @@ const PATTERNS = [
   { id: "tls-old",      name: "TLS 1.0 / 1.1",           sev: "critical", re: /TLSv1(?:\.0|\.1)?\b|PROTOCOL_TLSv1(?:_1)?\b|ssl\.TLSv1\b|SslProtocols\.(?:Tls|Tls11)\b/i }, // quantumscan-ignore
   { id: "md5",          name: "MD5",                      sev: "critical", re: /\bMD5\b|md5\(|hashlib\.md5|MessageDigest\.getInstance\s*\(\s*["']MD5["']\)|new\s+MD5(?:CryptoServiceProvider)?\s*\(|MD5CryptoServiceProvider\b/i, alt: "SHA3-256 or SHA-256" }, // quantumscan-ignore
   { id: "sha1",         name: "SHA-1",                    sev: "critical", re: /\bSHA1\b|\bsha1\s*\(|hashlib\.sha1\b|MessageDigest\.getInstance\s*\(\s*["']SHA-?1["']\)|new\s+SHA1CryptoServiceProvider\s*\(|SHA1CryptoServiceProvider\b/i, alt: "SHA-256" }, // quantumscan-ignore
-  { id: "des",          name: "DES",                      sev: "critical", re: /\bDES\b(?!C?SHA|\s*ede)|DESKeySpec|DES\.new\b|DESCryptoServiceProvider\b|Cipher\.getInstance\s*\(\s*["']DES[/"']/i }, // quantumscan-ignore
+  { id: "des",          name: "DES",                      sev: "critical", re: /\bDES\b(?!C?SHA|\s*ede)|DESKeySpec|DES\.new\b|DESCryptoServiceProvider\b|Cipher\.getInstance\s*\(\s*["']DES[\/"']/i }, // quantumscan-ignore
   { id: "3des",         name: "3DES / TripleDES",         sev: "critical", re: /3DES|TripleDES|DESede|DES_EDE|des3_cbc|des-ede3/i }, // quantumscan-ignore
   { id: "rc4",          name: "RC4",                      sev: "critical", re: /\bRC4\b|ARCFOUR|ARC4\b|arcfour|Cipher\.getInstance\s*\(\s*["']RC4/i }, // quantumscan-ignore
   { id: "ecb",          name: "AES-ECB (no IV)",          sev: "critical", re: /\/ECB\/|AES\.MODE_ECB|CipherMode\.ECB\b|Cipher\.getInstance\s*\(\s*["']AES["']|["']AES\/ECB/i, alt: "AES-GCM or ChaCha20-Poly1305" }, // quantumscan-ignore
@@ -146,9 +145,9 @@ const PATTERNS = [
   { id: "java-keystore-load",  name: "Java KeyStore PKCS12/JKS RSA key loading",         sev: "high", re: /KeyStore\.getInstance\s*\(\s*["'](?:PKCS12|JKS|BKS|Windows-MY)["']\s*\)|KeyStore\.load\s*\(|ks\.getKey\s*\(|keyStore\.aliases\s*\(\)/i,                                                            alt: "Migrate to PQC keys via Bouncy Castle bcpqc; PKCS12 format supports ML-DSA" }, // quantumscan-ignore
   { id: "rust-native-tls",     name: "Rust native-tls / openssl crate TLS",              sev: "high", re: /use\s+native_tls::|use\s+openssl::(?:ssl|rsa|ec|dsa|pkey)::|TlsConnector::(?:builder|new)\s*\(\s*\)|TlsAcceptor::(?:builder|new)\s*\(\s*\)|SslMethod::tls\s*\(\s*\)/i,                             alt: "Migrate to rustls with aws-lc-rs or oqs-provider for ML-KEM hybrid TLS" }, // quantumscan-ignore
   { id: "python-paramiko",    name: "Python Paramiko SSH",                    sev: "high", re: /paramiko\.(?:RSAKey|ECDSAKey|DSSKey|Ed25519Key)\.generate|paramiko\.(?:SSHClient|Transport)\(|from paramiko import|import paramiko/i, alt: "OpenSSH mlkem768x25519-sha256 (when Paramiko adds PQC KEM)" }, // quantumscan-ignore
-  { id: "ruby-openssl-pkey",  name: "Ruby OpenSSL PKey RSA/EC/DSA",           sev: "high", re: /OpenSSL::PKey::(?:RSA|EC|DSA)\.(?:new|generate)|OpenSSL::SSL::SSLContext\.new|require\s+[\'"]openssl[\'"].*PKey/i, alt: "openssl-oqs gem (ML-KEM / ML-DSA) or Ruby oqs-provider" }, // quantumscan-ignore
+  { id: "ruby-openssl-pkey",  name: "Ruby OpenSSL PKey RSA/EC/DSA",           sev: "high", re: /OpenSSL::PKey::(?:RSA|EC|DSA)\.(?:new|generate)|OpenSSL::SSL::SSLContext\.new|require\s+['"]openssl['"].*PKey/i, alt: "openssl-oqs gem (ML-KEM / ML-DSA) or Ruby oqs-provider" }, // quantumscan-ignore
   { id: "terraform-tls-key",  name: "Terraform tls_private_key RSA/ECDSA",   sev: "high", re: /resource\s+["'"]tls_private_key["'"]|algorithm\s*=\s*["'"](?:RSA|ECDSA|DSA)["'"]|tls_self_signed_cert|tls_locally_signed_cert/i, alt: "Await HashiCorp tls provider PQC support; use external_provider with openssl-oqs" }, // quantumscan-ignore
-  { id: "nodejs-crypto-asym", name: "Node.js crypto asymmetric ops",           sev: "high", re: /crypto\.createECDH\s*\(|generateKeyPairSync\s*\(\s*['\"](?:rsa|ec|dsa|ed25519|x25519)['\"]|crypto\.createSign\s*\(|createDiffieHellman\s*\(/i, alt: "Node.js crypto.generateKeyPairSync with ML-KEM-768 via oqs-node binding" }, // quantumscan-ignore
+  { id: "nodejs-crypto-asym", name: "Node.js crypto asymmetric ops",           sev: "high", re: /crypto\.createECDH\s*\(|generateKeyPairSync\s*\(\s*['"](?:rsa|ec|dsa|ed25519|x25519)['"]|crypto\.createSign\s*\(|createDiffieHellman\s*\(/i, alt: "Node.js crypto.generateKeyPairSync with ML-KEM-768 via oqs-node binding" }, // quantumscan-ignore
   { id: "java-bc-pem-io",     name: "Bouncy Castle PEM I/O",                  sev: "high", re: /PEMParser\s*\(|PEMKeyPair|JcaPEMKeyConverter|JcaPKCS8Generator|PKCS8Generator|PemWriter|JcaPEMWriter/i, alt: "Bouncy Castle bcpqc-jdk18on: ML-DSA / ML-KEM PKCS12 support" }, // quantumscan-ignore
   { id: "dart-pointycastle",  name: "Dart pointycastle RSA/EC",               sev: "high", re: /(?:package:pointycastle|RSAKeyGenerationParameters|ECKeyGeneratorParameters|RSAPrivateKey\s*\(|ECPrivateKey\s*\(|AsymmetricKeyPair<(?:RSA|EC))/i, alt: "package:cryptography with ML-KEM-768 (liboqs FFI) when Dart binding lands" }, // quantumscan-ignore
   { id: "go-rsa-ops",         name: "Go crypto/rsa operations",               sev: "high", re: /rsa\.GenerateMultiPrimeKey|rsa\.DecryptPKCS1v15|rsa\.SignPSS\s*\(|rsa\.EncryptOAEP\s*\(|rsa\.DecryptOAEP\s*\(|rsa\.EncryptPKCS1v15/i, alt: "ML-KEM-768 (FIPS 203) via golang.org/x/crypto/mlkem or cloudflare/circl" }, // quantumscan-ignore
@@ -163,6 +162,15 @@ const PATTERNS = [
   { id: "solidity-zk-ecdsa-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /verifyECDSASignature\s*\(|ECDSAVerifier\.verify|Groth16Verifier.*ecdsa|PlonkVerifier.*ecdsa|zkECDSA|circuit.*ecrecover|snark.*ecdsa.*proof|verify.*secp256k1.*proof/i, alt: "Hash-based ZK proofs (e.g., MiMC, Poseidon) or quantum-resistant signature schemes inside circuits" },
   { id: "layerzero-crosschain-signature", name: "LayerZero / Wormhole cross-chain ECDSA signature relay", sev: "high", re: /ILayerZeroEndpoint\s*\.\s*send|lzReceive\s*\(.*signatures|adapterParams.*signatures|relayer.*verifySignatures|Wormhole.*parseAndVerifyVM|verifyVAA\s*\(|GuardianSet.*signatures|parseVM\s*\(.*signatures/i, alt: "Quantum-resistant cross-chain messaging with ML-DSA or hash-based oracle commitments" },
   { id: "signal-protocol-x3dh-ecdh", name: "Signal Protocol X3DH / Double Ratchet ECDH", sev: "high", re: /X3DH|Extended\s+Triple\s+Diffie-Hellman|DoubleRatchet|Signal\s+Protocol.*ECDH|libsignal.*KeyPair|Curve25519.*agreementWith|generateIdentityKeyPair|generatePreKey|calculateAgreement\s*\(.*Curve25519/i, alt: "Quantum-resistant key agreement: ML-KEM-768 (Kyber) or NTRU for session key establishment" },
+  // HIGH — SSH library / framework false-negative fixes (2026-06-23 v1.8.3)
+  { id: "java-jsch-constructor",    name: "JSch SSH client constructor / session (RSA/ECDSA)",             sev: "high", re: /new\s+JSch\s*\(\)|jsch\.getSession\s*\(|jsch\.addIdentity\s*\(|JSch\s+\w+\s*=\s*new\s+JSch/i,  alt: "Monitor OpenSSH hybrid PQC KEX; plan ML-DSA host-key migration" },
+  { id: "java-sshj-client",         name: "sshj SSHClient (RSA/ECDSA/Ed25519 key exchange)",               sev: "high", re: /new\s+SSHClient\s*\(\)|sshClient\.authPublickey\s*\(|sshClient\.loadKnownHosts\s*\(|net\.schmizz\.sshj/i, alt: "Monitor OpenSSH hybrid PQC KEX; plan ML-KEM migration" },
+  { id: "python-fabric-ssh",         name: "Python Fabric SSH connection (wraps paramiko/RSA/ECDSA)",       sev: "high", re: /from\s+fabric(?:\.connection)?\s+import|fabric\.Connection\s*\(|from\s+fabric\s+import\s+(?:Connection|task|run)/i, alt: "Monitor paramiko PQC support roadmap" },
+  { id: "rust-russh-thrussh",        name: "Rust russh / thrussh SSH library (RSA/Ed25519)",                sev: "high", re: /use\s+(?:russh|thrussh)::|(?:russh|thrussh)::(?:client|server|keys|config|ChannelMsg)/i,                           alt: "Plan migration when PQC SSH KEX is standardized" },
+  { id: "go-ssh-dial-connect",       name: "Go x/crypto/ssh dial / client connect (RSA/ECDSA/Ed25519)",    sev: "high", re: /ssh\.Dial\s*\(|ssh\.NewClientConn\s*\(|ssh\.NewSession\s*\(|ssh\.ClientConfig\{|ssh\.ClientConfig\s*\{/i, alt: "Upgrade to hybrid PQC KEX sntrup761x25519-sha512 in OpenSSH 9.0+" },
+  { id: "csharp-chilkat-winscp-ssh", name: "C# Chilkat / WinSCP SSH (RSA/ECDSA key auth)",                 sev: "high", re: /new\s+Chilkat\.Ssh\s*\(\)|new\s+Chilkat\.SFtp\s*\(\)|WinSCP\.Session\s*\(\)|SshHostKeyPolicy|SessionOptions\s*\{[\s\S]{0,300}SshPrivateKey/i, alt: "Monitor WinSCP / Chilkat PQC SSH support roadmap" },
+  { id: "gradle-ssh-crypto-dep",     name: "Gradle build SSH / crypto dependency declaration",              sev: "high", re: /(?:implementation|compile|api|runtimeOnly)\s*[("']+(?:org\.apache\.sshd|com\.jcraft|net\.schmizz|org\.bouncycastle|io\.github\.nscuro)/i, alt: "Monitor PQC-ready SSH libraries; plan ML-KEM migration" },
+  { id: "java-mina-sshd-server-api", name: "Apache MINA SSHD server/session API (RSA/ECDSA/Ed25519)",      sev: "high", re: /SshServer\.setUpDefaultServer\s*\(\)|new\s+SshServer\s*\(\)|ClientSession\.create\s*\(|SftpClientFactory\.instance\s*\(\)|DefaultSftpClient/i, alt: "Monitor Apache MINA SSHD PQC roadmap; migrate host keys to ML-DSA" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
@@ -229,6 +237,8 @@ const SCANNABLE_EXTS = new Set([
   ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp",
   ".php", ".kt", ".swift", ".scala", ".ex", ".exs",
   ".sol",
+  ".gradle", ".kts",
+  ".conf", ".cfg", ".ini",
 ]);
 
 const SKIP_DIRS = new Set([
@@ -804,5 +814,3 @@ function main() {
 }
 
 main();
-
-
