@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.0";
+const VERSION = "1.8.1";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -153,6 +153,11 @@ const PATTERNS = [
   { id: "dart-pointycastle",  name: "Dart pointycastle RSA/EC",               sev: "high", re: /(?:package:pointycastle|RSAKeyGenerationParameters|ECKeyGeneratorParameters|RSAPrivateKey\s*\(|ECPrivateKey\s*\(|AsymmetricKeyPair<(?:RSA|EC))/i, alt: "package:cryptography with ML-KEM-768 (liboqs FFI) when Dart binding lands" }, // quantumscan-ignore
   { id: "go-rsa-ops",         name: "Go crypto/rsa operations",               sev: "high", re: /rsa\.GenerateMultiPrimeKey|rsa\.DecryptPKCS1v15|rsa\.SignPSS\s*\(|rsa\.EncryptOAEP\s*\(|rsa\.DecryptOAEP\s*\(|rsa\.EncryptPKCS1v15/i, alt: "ML-KEM-768 (FIPS 203) via golang.org/x/crypto/mlkem or cloudflare/circl" }, // quantumscan-ignore
   { id: "python-x509-builder",name: "Python cryptography x509 cert builder",  sev: "high", re: /x509\.CertificateBuilder\(\)|x509\.load_pem_x509_certificate|x509\.load_der_x509_certificate|CertificateRevocationListBuilder|x509\.NameAttribute\s*\(|\.sign\s*\(.*hashes\.SHA/i, alt: "Await pyca/cryptography ML-DSA cert support (draft-ietf-lamps-dilithium-certificates)" }, // quantumscan-ignore
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-23
+  { id: "solidity-erc1271-signature", name: "Solidity ERC-1271 isValidSignature (ECDSA)", sev: "high", re: /function\s+isValidSignature\s*\(|IERC1271\s*\.\s*isValidSignature|ERC1271\.isValidSignature|SignatureChecker\.isValidSignatureNow|_isValidSignature\s*\([^)]*\)|0x1626ba7e/i, alt: "Post-quantum signature schemes: ML-DSA (Dilithium, NIST FIPS 204) or SLH-DSA (SPHINCS+, NIST FIPS 205)" },
+  { id: "solidity-erc4337-ecdsa", name: "Solidity ERC-4337 UserOperation ECDSA validation", sev: "high", re: /validateUserOp\s*\(|IAccount\.validateUserOp|UserOperation\s*\.|_validateSignature\s*\(\s*UserOperation|ecrecover\s*\([^)]*userOp|ECDSA\.recover\s*\([^)]*userOp/i, alt: "Post-quantum signature schemes: ML-DSA (Dilithium, NIST FIPS 204) or SLH-DSA (SPHINCS+, NIST FIPS 205)" },
+  { id: "uniswap-permit2-ecdsa", name: "Uniswap Permit2 / position signature (ECDSA)", sev: "high", re: /IPermit2\.permit|Permit2\.permitTransferFrom|PermitTransferFrom|SignatureTransfer|AllowanceTransfer\.permit|_verifyPermitSignature|EIP712\s*\(\s*["']Permit2|INonfungiblePositionManager\.permit/i, alt: "Post-quantum gasless approval via ML-DSA (Dilithium, NIST FIPS 204)" },
+  { id: "zk-ecdsa-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /ECDSAVerify\s*\(|circom.*ecdsa|Secp256k1\s*\(|ecdsa_verify_circuit|groth16.*ecdsa|plonk.*ecdsa|"ecdsa"\s*:\s*\{|ecdsaCircuit|verifyECDSAProof/i, alt: "Post-quantum ZK circuits using hash-based or lattice-friendly signatures (e.g., Picnic, Rainier)" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
