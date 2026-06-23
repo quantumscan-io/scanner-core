@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.1";
+const VERSION = "1.8.2";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -158,6 +158,11 @@ const PATTERNS = [
   { id: "solidity-erc4337-ecdsa", name: "Solidity ERC-4337 UserOperation ECDSA validation", sev: "high", re: /validateUserOp\s*\(|IAccount\.validateUserOp|UserOperation\s*\.|_validateSignature\s*\(\s*UserOperation|ecrecover\s*\([^)]*userOp|ECDSA\.recover\s*\([^)]*userOp/i, alt: "Post-quantum signature schemes: ML-DSA (Dilithium, NIST FIPS 204) or SLH-DSA (SPHINCS+, NIST FIPS 205)" },
   { id: "uniswap-permit2-ecdsa", name: "Uniswap Permit2 / position signature (ECDSA)", sev: "high", re: /IPermit2\.permit|Permit2\.permitTransferFrom|PermitTransferFrom|SignatureTransfer|AllowanceTransfer\.permit|_verifyPermitSignature|EIP712\s*\(\s*["']Permit2|INonfungiblePositionManager\.permit/i, alt: "Post-quantum gasless approval via ML-DSA (Dilithium, NIST FIPS 204)" },
   { id: "zk-ecdsa-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /ECDSAVerify\s*\(|circom.*ecdsa|Secp256k1\s*\(|ecdsa_verify_circuit|groth16.*ecdsa|plonk.*ecdsa|"ecdsa"\s*:\s*\{|ecdsaCircuit|verifyECDSAProof/i, alt: "Post-quantum ZK circuits using hash-based or lattice-friendly signatures (e.g., Picnic, Rainier)" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-23
+  { id: "solidity-permit2-signature", name: "Uniswap Permit2 / position signature (ECDSA)", sev: "high", re: /IPermit2\s*\.\s*permit|permitTransferFrom\s*\(|permitWitnessTransferFrom\s*\(|SignatureTransfer\s*\.\s*permit|AllowanceTransfer\s*\.\s*permit|_verifyPermit2Signature|Permit2\.permitTransferFrom/i, alt: "Quantum-resistant authorization schemes or hash-based commitments with post-quantum signatures" },
+  { id: "solidity-zk-ecdsa-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /verifyECDSASignature\s*\(|ECDSAVerifier\.verify|Groth16Verifier.*ecdsa|PlonkVerifier.*ecdsa|zkECDSA|circuit.*ecrecover|snark.*ecdsa.*proof|verify.*secp256k1.*proof/i, alt: "Hash-based ZK proofs (e.g., MiMC, Poseidon) or quantum-resistant signature schemes inside circuits" },
+  { id: "layerzero-crosschain-signature", name: "LayerZero / Wormhole cross-chain ECDSA signature relay", sev: "high", re: /ILayerZeroEndpoint\s*\.\s*send|lzReceive\s*\(.*signatures|adapterParams.*signatures|relayer.*verifySignatures|Wormhole.*parseAndVerifyVM|verifyVAA\s*\(|GuardianSet.*signatures|parseVM\s*\(.*signatures/i, alt: "Quantum-resistant cross-chain messaging with ML-DSA or hash-based oracle commitments" },
+  { id: "signal-protocol-x3dh-ecdh", name: "Signal Protocol X3DH / Double Ratchet ECDH", sev: "high", re: /X3DH|Extended\s+Triple\s+Diffie-Hellman|DoubleRatchet|Signal\s+Protocol.*ECDH|libsignal.*KeyPair|Curve25519.*agreementWith|generateIdentityKeyPair|generatePreKey|calculateAgreement\s*\(.*Curve25519/i, alt: "Quantum-resistant key agreement: ML-KEM-768 (Kyber) or NTRU for session key establishment" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
