@@ -1,8 +1,9 @@
+import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.2";
+const VERSION = "1.8.3";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
