@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.2";
+const VERSION = "1.8.3";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -163,6 +163,12 @@ const PATTERNS = [
   { id: "solidity-zk-ecdsa-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /verifyECDSASignature\s*\(|ECDSAVerifier\.verify|Groth16Verifier.*ecdsa|PlonkVerifier.*ecdsa|zkECDSA|circuit.*ecrecover|snark.*ecdsa.*proof|verify.*secp256k1.*proof/i, alt: "Hash-based ZK proofs (e.g., MiMC, Poseidon) or quantum-resistant signature schemes inside circuits" },
   { id: "layerzero-crosschain-signature", name: "LayerZero / Wormhole cross-chain ECDSA signature relay", sev: "high", re: /ILayerZeroEndpoint\s*\.\s*send|lzReceive\s*\(.*signatures|adapterParams.*signatures|relayer.*verifySignatures|Wormhole.*parseAndVerifyVM|verifyVAA\s*\(|GuardianSet.*signatures|parseVM\s*\(.*signatures/i, alt: "Quantum-resistant cross-chain messaging with ML-DSA or hash-based oracle commitments" },
   { id: "signal-protocol-x3dh-ecdh", name: "Signal Protocol X3DH / Double Ratchet ECDH", sev: "high", re: /X3DH|Extended\s+Triple\s+Diffie-Hellman|DoubleRatchet|Signal\s+Protocol.*ECDH|libsignal.*KeyPair|Curve25519.*agreementWith|generateIdentityKeyPair|generatePreKey|calculateAgreement\s*\(.*Curve25519/i, alt: "Quantum-resistant key agreement: ML-KEM-768 (Kyber) or NTRU for session key establishment" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-24
+  { id: "python-pycryptodome-rsa-dsa", name: "PyCryptodome RSA/DSA key operations", sev: "high", re: /from\s+Crypto\.PublicKey\s+import\s+(RSA|DSA)|RSA\.generate\s*\(|DSA\.generate\s*\(|RSA\.import_key\s*\(|DSA\.import_key\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 (NIST FIPS 203/204) via liboqs-python" },
+  { id: "java-bouncy-rsa-ec-keygen", name: "Bouncy Castle RSA/EC KeyPairGenerator", sev: "high", re: /KeyPairGenerator\.getInstance\s*\(\s*['"]RSA['"].*BouncyCastle|KeyPairGenerator\.getInstance\s*\(\s*['"]EC['"].*BouncyCastle|KeyPairGenerator\.getInstance\s*\(\s*['"]ECDSA['"].*BouncyCastle|new\s+RSAKeyPairGenerator\s*\(|new\s+ECKeyPairGenerator\s*\(/i, alt: "CRYSTALS-Kyber or CRYSTALS-Dilithium via BouncyCastle PQC provider" },
+  { id: "dotnet-rsa-ecdsa-sign-verify", name: ".NET RSA/ECDSA SignData/VerifyData", sev: "high", re: /\.SignData\s*\(.*RSA|\.VerifyData\s*\(.*RSA|\.SignData\s*\(.*ECDSA|\.VerifyData\s*\(.*ECDSA|RSACryptoServiceProvider\s*\(|ECDsaCng\s*\(|RSACng\.SignData|ECDsa\.SignData/i, alt: "ML-DSA-65 (NIST FIPS 204) via future .NET PQC libraries" },
+  { id: "php-openssl-ec-keygen", name: "PHP openssl EC key generation", sev: "high", re: /openssl_pkey_new\s*\(.*['"](ec|EC)_KEY|openssl_pkey_new\s*\(.*prime256v1|openssl_pkey_new\s*\(.*secp256k1|openssl_pkey_new\s*\(.*secp384r1|phpseclib.*ECDSA.*createKey|phpseclib.*EC.*createKey/i, alt: "Post-quantum signatures via sodium_crypto_sign (Ed25519 interim) or future ML-DSA bindings" },
+  { id: "swift-cryptokit-p256-sign", name: "Swift CryptoKit P256 signing", sev: "high", re: /P256\.Signing\.PrivateKey\s*\(|P256\.KeyAgreement\.PrivateKey\s*\(|P384\.Signing\.PrivateKey\s*\(|P521\.Signing\.PrivateKey\s*\(|Curve25519\.Signing\.PrivateKey\s*\(/i, alt: "Post-quantum signatures (ML-DSA) via future Swift PQC libraries or CryptoKit updates" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
