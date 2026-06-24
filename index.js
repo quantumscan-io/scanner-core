@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.3";
+const VERSION = "1.8.4";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -169,6 +169,11 @@ const PATTERNS = [
   { id: "dotnet-rsa-ecdsa-sign-verify", name: ".NET RSA/ECDSA SignData/VerifyData", sev: "high", re: /\.SignData\s*\(.*RSA|\.VerifyData\s*\(.*RSA|\.SignData\s*\(.*ECDSA|\.VerifyData\s*\(.*ECDSA|RSACryptoServiceProvider\s*\(|ECDsaCng\s*\(|RSACng\.SignData|ECDsa\.SignData/i, alt: "ML-DSA-65 (NIST FIPS 204) via future .NET PQC libraries" },
   { id: "php-openssl-ec-keygen", name: "PHP openssl EC key generation", sev: "high", re: /openssl_pkey_new\s*\(.*['"](ec|EC)_KEY|openssl_pkey_new\s*\(.*prime256v1|openssl_pkey_new\s*\(.*secp256k1|openssl_pkey_new\s*\(.*secp384r1|phpseclib.*ECDSA.*createKey|phpseclib.*EC.*createKey/i, alt: "Post-quantum signatures via sodium_crypto_sign (Ed25519 interim) or future ML-DSA bindings" },
   { id: "swift-cryptokit-p256-sign", name: "Swift CryptoKit P256 signing", sev: "high", re: /P256\.Signing\.PrivateKey\s*\(|P256\.KeyAgreement\.PrivateKey\s*\(|P384\.Signing\.PrivateKey\s*\(|P521\.Signing\.PrivateKey\s*\(|Curve25519\.Signing\.PrivateKey\s*\(/i, alt: "Post-quantum signatures (ML-DSA) via future Swift PQC libraries or CryptoKit updates" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-24
+  { id: "go-crypto-dsa", name: "Go stdlib DSA key operations", sev: "high", re: /dsa\.GenerateParameters\s*\(|dsa\.GenerateKey\s*\(|dsa\.Sign\s*\(|dsa\.Verify\s*\(|\*dsa\.PrivateKey|\*dsa\.PublicKey/i, alt: "ML-DSA-65 (NIST FIPS 204) via liboqs-go or circl" },
+  { id: "scala-bouncycastle-rsa-ec", name: "Scala Bouncy Castle RSA/EC key operations", sev: "high", re: /RSAKeyPairGenerator|ECKeyPairGenerator|new\s+KeyPairGenerator\.getInstance\s*\(\s*["']RSA["']|new\s+KeyPairGenerator\.getInstance\s*\(\s*["']EC["']|org\.bouncycastle\.crypto\.generators\.(RSA|EC)KeyPairGenerator/i, alt: "ML-KEM-768 or ML-DSA-65 (NIST FIPS 203/204)" },
+  { id: "rust-snow-noise-protocol", name: "Rust snow Noise Protocol (DH-based)", sev: "high", re: /snow::(Builder|HandshakeState|TransportState)|NoiseBuilder::new|\bNoise(IK|XX|KK|NK|XK|N|K|X)\b|params\s*:\s*NoiseParams|25519.*ChaChaPoly|snow::params::NoiseParams/i, alt: "PQ Noise with Kyber/ML-KEM via pqnoise or hybrid extensions" },
+  { id: "libsodium-box-scalarmult", name: "libsodium Curve25519 box/scalarmult", sev: "high", re: /crypto_box_keypair\s*\(|crypto_box_seal\s*\(|crypto_scalarmult_base\s*\(|crypto_scalarmult\s*\(|crypto_kx_keypair\s*\(|crypto_kx_client_session_keys\s*\(|crypto_kx_server_session_keys\s*\(/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
