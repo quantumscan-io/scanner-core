@@ -45,6 +45,67 @@ NIST finalized **ML-KEM** (key encapsulation) and **ML-DSA** (signatures) in Aug
 | SHA-1 | SHA-3 / SHA-256+ |
 | AES-128 | AES-256 |
 
+## Substrate / Polkadot
+
+Use `--substrate` to enable 19 Substrate-specific PQC patterns covering BABE/GRANDPA consensus keys, custom pallet crypto, XCM signing, and ink! smart contracts.
+
+```bash
+npx quantumscan ./my-parachain --substrate
+```
+
+**What gets detected with `--substrate`:**
+
+| Pattern group | Covered APIs |
+|---|---|
+| BABE/GRANDPA keys | `BabeId`, `GrandpaId`, `sr25519::Pair`, `ed25519::Pair`, `impl_opaque_keys!`, `LocalKeystore::open`, `KeystorePtr` |
+| Pallet crypto | `sp_runtime::traits::Verify`, `MultiSignature`, `sp_core::sr25519/ed25519`, `sp_io::crypto::*` |
+| XCM signing | `OriginKind::SovereignAccount`, `xcm::prelude::*`, `Junction::AccountId32`, `xcm_executor::XcmExecutor` |
+| ink! contracts | `ink::env::ecdsa_recover`, `ink::env::sr25519_verify`, `self.env().caller()` |
+| Rust crates | `schnorrkel`, `ed25519-dalek`, `x25519-dalek`, `libp2p-noise` |
+
+**Example output:**
+
+```
+QuantumScan v1.9.0  Substrate/Polkadot PQC Analysis
+──────────────────────────────────────────────────────────
+Workspace  Substrate/Polkadot detected
+Pallets    3 found (pallets/staking, pallets/identity, pallets/session)
+ink!       2 contract(s) found
+Crates     frame-support, sp-core, sp-runtime, schnorrkel… +4
+Patterns   19 Substrate-specific PQC patterns active
+
+🟠 HIGH     12 findings
+  pallets/staking/src/lib.rs:42    BABE Authority Key (sr25519)      `BabeId`
+  pallets/staking/src/lib.rs:89    Substrate Session Keys            `impl_opaque_keys! {`
+  contracts/token/src/lib.rs:31    ink! ECDSA Recovery (secp256k1)   `self.env().ecdsa_recover`
+  ...
+
+Risk Score  85/100  High Risk
+```
+
+**Migration paths:**
+
+| Algorithm | PQC replacement |
+|---|---|
+| sr25519 / BABE | ML-DSA (CRYSTALS-Dilithium) — await sp-core PQC RFC |
+| ed25519 / GRANDPA | ML-DSA or SLH-DSA — await Substrate PQC pallets |
+| x25519 / libp2p-noise | ML-KEM (CRYSTALS-Kyber) — await libp2p PQC KEX |
+| ink! ECDSA | ML-DSA when ink! adds PQC host functions |
+
+**Running tests:**
+
+```bash
+npm test
+# → 60 tests pass, 6 groups, 0 failures
+# Node.js built-in test runner — no extra dependencies
+```
+
+**Docker:**
+
+```bash
+docker run --rm -v $(pwd):/target quantumscan/scanner /target --substrate
+```
+
 ## Contributing
 
 Open issues for new patterns you'd like detected. PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) if it exists, or just open a PR with:

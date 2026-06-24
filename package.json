@@ -37,6 +37,9 @@
     "xcm"
   ],
   "type": "module",
+  "scripts": {
+    "test": "node --test test/substrate-patterns.test.js"
+  },
   "bin": {
     "quantumscan": "./index.js"
   },
