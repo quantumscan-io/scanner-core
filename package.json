@@ -1,7 +1,7 @@
 {
   "name": "quantumscan",
-  "version": "1.5.0",
-  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase and Solidity smart contracts",
+  "version": "1.9.0",
+  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase, Solidity contracts, and Substrate/Polkadot pallets",
   "keywords": [
     "post-quantum",
     "cryptography",
@@ -28,7 +28,13 @@
     "defi",
     "ethereum",
     "eip712",
-    "blockchain"
+    "blockchain",
+    "substrate",
+    "polkadot",
+    "ink",
+    "babe",
+    "grandpa",
+    "xcm"
   ],
   "type": "module",
   "bin": {

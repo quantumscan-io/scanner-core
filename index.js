@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.4";
+const VERSION = "1.9.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -233,6 +233,123 @@ const VULNERABLE_DEPS = [
   { pkg: "bls12-381",       eco: "rust",   sev: "high",     reason: "BLS12-381 pairing curve (quantum-vulnerable)", alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
   { pkg: "bls_signatures",  eco: "rust",   sev: "high",     reason: "BLS signatures over BLS12-381",             alt: "ML-DSA (NIST FIPS 204) for non-aggregation use cases" }, // quantumscan-ignore
 ];
+
+// ── Substrate/Polkadot PQC patterns (activated by --substrate) ───────────────
+const SUBSTRATE_PATTERNS = [
+  // Pattern 1: BABE/GRANDPA consensus key generation
+  { id: "substrate-babe-authority",    name: "BABE Authority Key (sr25519)",           sev: "high",
+    re: /BabeId|babe_generate_session_keys|sr25519::(?:Public|Pair|Signature)\b|app_crypto!\s*\(.*sr25519|BabeAuthorityId|BabeKeyType/i,
+    alt: "ML-DSA (CRYSTALS-Dilithium) via sp-core PQC extension when standardized" },
+  { id: "substrate-grandpa-authority", name: "GRANDPA Authority Key (ed25519)",         sev: "high",
+    re: /GrandpaId|grandpa_generate_session_keys|ed25519::(?:Public|Pair|Signature)\b|GrandpaAuthorityId|AuthorityList.*grandpa|GrandpaKeyType|GRANDPA_ENGINE_ID/i,
+    alt: "ML-DSA or SLH-DSA when Substrate PQC pallets land" },
+  { id: "substrate-session-keys",      name: "Substrate Session Keys (multi-key)",      sev: "high",
+    re: /impl_opaque_keys!\s*\{|SessionKeys\s*\{[^}]*(?:babe|grandpa|im_online|authority_discovery)|generate_session_keys|decode_session_keys/i,
+    alt: "Await Polkadot PQC session key migration RFC" },
+  { id: "substrate-validator-keystore",name: "Substrate Validator Keystore",            sev: "high",
+    re: /KeystorePtr|SyncCryptoStorePtr|LocalKeystore::open|keystore\.(?:sr25519_generate_new|ed25519_generate_new|ecdsa_generate_new)|sp_keystore|CryptoStore/i,
+    alt: "Monitor substrate-crypto PQC keystore RFC" },
+  // Pattern 2: Pallet cryptography (frame_support, sp-runtime, sp-io)
+  { id: "substrate-pallet-verify",     name: "Substrate Pallet Signature Verify",       sev: "high",
+    re: /sp_runtime::traits::Verify|MultiSignature|AnySignature|sp_core::(?:sr25519|ed25519|ecdsa)::Signature|(?:Sr25519|Ed25519|Ecdsa)Signature\b/i,
+    alt: "ML-DSA (CRYSTALS-Dilithium) when sp-runtime adds PQC signature types" },
+  { id: "substrate-pallet-crypto-primitive", name: "Substrate sp-core Crypto Primitive",sev: "high",
+    re: /sp_core::crypto::|sp_core::(?:sr25519|ed25519|ecdsa)::|use sp_core::(?:Pair|Public|Signature)|frame_support::crypto::|CryptoTypePublicPair/i,
+    alt: "ML-DSA via future sp-core-pqc crate" },
+  { id: "substrate-sp-io-crypto",      name: "Substrate sp-io Crypto Host Function",    sev: "high",
+    re: /sp_io::crypto::(?:sr25519_verify|ed25519_verify|ecdsa_verify|sr25519_sign|ed25519_sign|ecdsa_sign)|sp_io::crypto::sr25519_public_keys/i,
+    alt: "Await PQC host function additions to sp-io" },
+  { id: "substrate-account-id",        name: "Substrate AccountId (sr25519/ed25519)",   sev: "medium",
+    re: /AccountId32|MultiSigner|(?:Sr25519|Ed25519|Ecdsa)(?:Signer|Public)\b|from_(?:ss58check|public)\s*\(|derive_account/i,
+    alt: "Monitor Polkadot account abstraction PQC RFC" },
+  // Pattern 3: XCM signing and cross-chain message authentication
+  { id: "substrate-xcm-origin",        name: "XCM Signed Origin (sr25519/ed25519)",     sev: "high",
+    re: /OriginKind::(?:SovereignAccount|Superuser|Native)|xcm::(?:v3|v4)::OriginKind|SignedOrigin.*xcm|XcmRouter.*sign|xcm_executor::(?:Config|XcmExecutor)/i,
+    alt: "Await XCM v5 PQC origin types" },
+  { id: "substrate-xcm-multiasset-sign",name: "XCM Message with Account Auth",         sev: "high",
+    re: /xcm::prelude::\*|MultiLocation.*AccountId32|AccountId32.*(?:network|junction)|Junction::AccountId32|WithdrawAsset.*AccountId32/i,
+    alt: "Monitor Polkadot XCM PQC account junction proposals" },
+  { id: "substrate-xcm-barrier",       name: "XCM Barrier / Signed Extension",          sev: "medium",
+    re: /AllowSignedExtrinsic|SignedExtension.*xcm|xcm_builder::(?:SignedToAccountId32|OriginToPluralityVoice)|pallet_xcm::(?:Origin|Config)/i,
+    alt: "Await xcm-builder PQC barrier updates" },
+  // Pattern 4: ink! smart contract cryptography
+  { id: "ink-ecdsa-recover",           name: "ink! ECDSA Recovery (secp256k1)",         sev: "high",
+    re: /ink::env::ecdsa_recover|ink_env::ecdsa_recover|self\.env\(\)\.ecdsa_recover|ink::env::ecdsa_to_eth_address/i,
+    alt: "ML-DSA (CRYSTALS-Dilithium) when ink! adds PQC host functions" },
+  { id: "ink-sr25519-verify",          name: "ink! sr25519 Signature Verify",            sev: "high",
+    re: /ink::env::sr25519_verify|ink_env::sr25519_verify|self\.env\(\)\.sr25519_verify/i,
+    alt: "ML-DSA when ink! adds PQC verify host function" },
+  { id: "ink-hash-crypto",             name: "ink! Cryptographic Hash",                  sev: "medium",
+    re: /ink::env::hash_bytes|ink::env::hash_encoded|self\.env\(\)\.hash_(?:bytes|encoded)|CryptoHash\b.*ink|ink.*\bBlake2x(?:128|256)\b/i,
+    alt: "Ensure hashes feed into PQC-safe signing schemes" },
+  { id: "ink-account-id-sign",         name: "ink! AccountId from Signature",            sev: "medium",
+    re: /AccountId.*caller\(\)|self\.env\(\)\.caller\(\)|ink::env::caller|#\[ink\(constructor\)\].*AccountId|set_code_hash.*AccountId/i,
+    alt: "Monitor ink! PQC account abstraction proposals" },
+  // Pattern 5: Substrate workspace / crate-level usage
+  { id: "substrate-schnorrkel",        name: "schnorrkel crate (sr25519 Rust)",          sev: "high",
+    re: /use\s+schnorrkel::|schnorrkel::(?:Keypair|PublicKey|SecretKey|MiniSecretKey|Signature|sign|verify)|MiniSecretKey::from_bytes/i,
+    alt: "ML-DSA (CRYSTALS-Dilithium) via pqcrypto-dilithium crate" },
+  { id: "substrate-ed25519-dalek",     name: "ed25519-dalek crate (GRANDPA keys)",       sev: "high",
+    re: /use\s+ed25519_dalek::|ed25519_dalek::(?:Keypair|PublicKey|SecretKey|ExpandedSecretKey|Signature|Verifier|SigningKey|VerifyingKey)/i,
+    alt: "ML-DSA (CRYSTALS-Dilithium) or SLH-DSA (SPHINCS+)" },
+  { id: "substrate-x25519-dalek",      name: "x25519-dalek crate (node key exchange)",   sev: "high",
+    re: /use\s+x25519_dalek::|x25519_dalek::(?:EphemeralSecret|StaticSecret|PublicKey|SharedSecret)/i,
+    alt: "ML-KEM (CRYSTALS-Kyber) for key encapsulation" },
+  { id: "substrate-libp2p-noise",      name: "libp2p Noise Protocol (X25519)",           sev: "high",
+    re: /libp2p(?:_noise|::noise)::Config|NoiseConfig::xx|libp2p::noise::NoiseAuthenticated|noise::X25519Spec/i,
+    alt: "ML-KEM hybrid Noise when libp2p adds PQC support" },
+];
+
+const SUBSTRATE_CRATE_SIGNALS = [
+  "frame-support", "frame-system", "sp-core", "sp-runtime", "sp-io",
+  "sp-std", "pallet-", "substrate-", "sc-", "polkadot-", "cumulus-",
+  "xcm", "schnorrkel", "ed25519-dalek", "x25519-dalek",
+];
+
+const PALLET_DIR_RE = /(?:^|\/)pallets?\//i;
+const INK_CONTRACT_RE = /#\[ink::contract\]|#\[ink\(storage\)\]/;
+
+function detectSubstrateWorkspace(targetDir, allFiles) {
+  const pallets = new Set();
+  const inkContracts = new Set();
+  const substrateDeps = new Set();
+  let hasCargoWorkspace = false;
+
+  for (const filePath of allFiles) {
+    const relPath = relative(targetDir, filePath).replace(/\\/g, "/");
+
+    if (PALLET_DIR_RE.test(relPath) && filePath.endsWith(".rs")) {
+      const dir = relPath.replace(/\/[^/]+$/, "");
+      pallets.add(dir);
+    }
+
+    if (filePath.endsWith(".rs")) {
+      let content = "";
+      try { content = readFileSync(filePath, "utf8"); } catch {}
+      if (INK_CONTRACT_RE.test(content)) {
+        const dir = relPath.replace(/\/[^/]+$/, "");
+        inkContracts.add(dir);
+      }
+    }
+
+    if (filePath.endsWith("Cargo.toml")) {
+      let content = "";
+      try { content = readFileSync(filePath, "utf8"); } catch {}
+      if (content.includes("[workspace]")) hasCargoWorkspace = true;
+      for (const sig of SUBSTRATE_CRATE_SIGNALS) {
+        if (content.includes(sig)) substrateDeps.add(sig);
+      }
+    }
+  }
+
+  return {
+    isSubstrate: hasCargoWorkspace || pallets.size > 0 || inkContracts.size > 0 || substrateDeps.size >= 2,
+    pallets: [...pallets],
+    inkContracts: [...inkContracts],
+    hasCargoWorkspace,
+    substrateDeps: [...substrateDeps],
+  };
+}
 
 const SCANNABLE_EXTS = new Set([
   ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
@@ -533,10 +650,12 @@ function visLen(str) { return str.replace(/\x1b\[[0-9;]*m/g, "").length; }
 function padEnd(str, len) { return str + " ".repeat(Math.max(0, len - visLen(str))); }
 function hr() { return "─".repeat(58); }
 
-function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib) {
-  console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
-  console.log(`${C.cyan}${APP_URL}${C.reset}`);
-  console.log(hr());
+function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false) {
+  if (!substrateMode) {
+    console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
+    console.log(`${C.cyan}${APP_URL}${C.reset}`);
+    console.log(hr());
+  }
   console.log(`Path     ${C.bold}${targetDir}${C.reset}`);
   console.log(`Files    ${C.gray}${totalFiles} total · ${scannableCount} scannable${C.reset}`);
   if (depCount > 0) console.log(`Deps     ${C.gray}${depCount} vulnerable package(s) found${C.reset}`);
@@ -603,7 +722,7 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
 }
 
 // ── JSON output ───────────────────────────────────────────────────────────────
-function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib) {
+function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib, substrateInfo = null) {
   const summary = { riskScore: score };
   for (const sev of SEV_ORDER) summary[sev] = findings.filter(f => f.sev === sev).length;
   summary.dependencies = findings.filter(f => f.type === "dependency").length;
@@ -614,6 +733,7 @@ function printJson(findings, totalFiles, scannableCount, targetDir, score, isCry
     coverage: (isCryptoLib || score <= 20)
       ? "partial — crypto library or low score: implementation-level patterns may not be fully covered"
       : "standard",
+    ...(substrateInfo ? { substrate: substrateInfo } : {}),
     summary,
     findings: findings.map(f => ({
       file: f.file, line: f.line,
@@ -729,6 +849,8 @@ Usage: npx quantumscan [path] [options]
 Options:
   --json             Output results as JSON (for CI/CD pipelines)
   --sarif            Output results as SARIF 2.1.0 (GitHub Security tab)
+  --substrate        Enable Substrate/Polkadot PQC patterns (sr25519, BABE,
+                     GRANDPA, XCM, ink!, schnorrkel, ed25519-dalek, libp2p-noise)
   --no-deps          Skip dependency scanning (package.json, requirements.txt…)
   --no-code          Skip source code scanning (only scan dependencies)
   --badge            Print README badge markdown after scan
@@ -745,6 +867,7 @@ Examples:
   npx quantumscan ./src --json
   npx quantumscan . --sarif > results.sarif
   npx quantumscan . --badge
+  npx quantumscan /path/to/polkadot-repo --substrate
   npx quantumscan /path/to/project --json | jq '.summary'
 
 Exit codes:
@@ -762,13 +885,17 @@ function main() {
   if (args.includes("--help") || args.includes("-h")) { console.log(HELP); exit(0); }
   if (args.includes("--version") || args.includes("-v")) { console.log(VERSION); exit(0); }
 
-  const jsonMode  = args.includes("--json");
-  const sarifMode = args.includes("--sarif");
-  const badgeMode = args.includes("--badge");
-  const noDeps    = args.includes("--no-deps");
-  const noCode    = args.includes("--no-code");
-  const noFail    = args.includes("--no-fail");
-  const pathArg   = args.find(a => !a.startsWith("-")) ?? ".";
+  const jsonMode       = args.includes("--json");
+  const sarifMode      = args.includes("--sarif");
+  const badgeMode      = args.includes("--badge");
+  const substrateMode  = args.includes("--substrate");
+  const noDeps         = args.includes("--no-deps");
+  const noCode         = args.includes("--no-code");
+  const noFail         = args.includes("--no-fail");
+  const pathArg        = args.find(a => !a.startsWith("-")) ?? ".";
+
+  // Inject Substrate patterns when --substrate flag is set
+  if (substrateMode) PATTERNS.push(...SUBSTRATE_PATTERNS);
 
   let targetDir;
   try {
@@ -791,19 +918,34 @@ function main() {
     allFiles = walkDir(targetDir);
   }
 
-  const scannableFiles  = allFiles.filter(f => SCANNABLE_EXTS.has(extname(f).toLowerCase()));
-  const codeFindings    = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir));
-  const depFindings     = noDeps ? [] : scanDependencies(targetDir);
-  const allFindings     = [...codeFindings, ...depFindings];
-  const score           = calcScore(allFindings);
-  const isCryptoLib     = mayBeCryptoLib(targetDir, allFiles);
+  const substrateInfo  = substrateMode ? detectSubstrateWorkspace(targetDir, allFiles) : null;
+  const scannableFiles = allFiles.filter(f => SCANNABLE_EXTS.has(extname(f).toLowerCase()));
+  const codeFindings   = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir));
+  const depFindings    = noDeps ? [] : scanDependencies(targetDir);
+  const allFindings    = [...codeFindings, ...depFindings];
+  const score          = calcScore(allFindings);
+  const isCryptoLib    = mayBeCryptoLib(targetDir, allFiles);
 
   if (sarifMode) {
     printSarif(allFindings, targetDir);
   } else if (jsonMode) {
-    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib);
+    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib, substrateInfo);
   } else {
-    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib);
+    if (substrateMode) {
+      console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Substrate/Polkadot PQC Analysis`);
+      console.log(`${C.cyan}${APP_URL}${C.reset}`);
+      console.log("─".repeat(58));
+      if (substrateInfo) {
+        const { isSubstrate, pallets, inkContracts, substrateDeps } = substrateInfo;
+        console.log(`Workspace  ${isSubstrate ? `${C.orange}Substrate/Polkadot detected${C.reset}` : `${C.dim}not detected${C.reset}`}`);
+        if (pallets.length > 0)      console.log(`Pallets    ${C.gray}${pallets.length} found (${pallets.slice(0,3).join(", ")}${pallets.length > 3 ? "…" : ""})${C.reset}`);
+        if (inkContracts.length > 0) console.log(`ink!       ${C.gray}${inkContracts.length} contract(s) found${C.reset}`);
+        if (substrateDeps.length > 0)console.log(`Crates     ${C.gray}${substrateDeps.slice(0,5).join(", ")}${substrateDeps.length > 5 ? `… +${substrateDeps.length - 5}` : ""}${C.reset}`);
+      }
+      console.log(`Patterns   ${C.gray}19 Substrate-specific PQC patterns active${C.reset}`);
+      console.log("");
+    }
+    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode);
     if (badgeMode) {
       const slug = detectRepoSlug(targetDir);
       if (slug) printBadge(slug, targetDir);
