@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.8.4";
+const VERSION = "1.9.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -179,6 +179,16 @@ const PATTERNS = [
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
   { id: "sha256-kdf",   name: "SHA-256 as password KDF",  sev: "low",      re: /sha256.*(?:password|passphrase)\b|(?:password|passphrase).*sha256/i, alt: "Argon2id or bcrypt" }, // quantumscan-ignore
   { id: "dh-1024",      name: "DH 1024-bit params",       sev: "low",      re: /DHParameterSpec\s*\(\s*1024|generate_parameters.*1024|dhparam\s+1024/i, alt: "ML-KEM" }, // quantumscan-ignore
+  // HIGH — new patterns added 2026-06-24 v1.9.0 — coverage for Rust SSH, libssh, pyOpenSSL, .NET ECDiffieHellman, Go elliptic, Java EdDSA
+  { id: "rust-russh-ssh",       name: "Rust russh/thrussh SSH",             sev: "high",   re: /\buse\s+russh::|use\s+thrussh::|russh::client::|russh::server::|ClientConfig::with_crypto_config|russh_keys::|thrussh_keys::|russh::ChannelMsg/g,                                   desc: "Rust russh/thrussh SSH library (Curve25519/RSA key exchange)",            pqcAlt: "Migrate SSH key exchange to PQC-hybrid ML-KEM-768 + X25519 (RFC 9370)" },
+  { id: "rust-ssh2-libssh2",    name: "Rust ssh2 (libssh2 bindings)",        sev: "high",   re: /\bssh2::Session\b|ssh2::Channel\b|\.handshake\(\)|\.userauth_password\b|\.userauth_pubkey_file\b|ssh2::PublicKey\b|\buse\s+ssh2::/g,                              desc: "Rust ssh2 crate (libssh2 bindings) uses RSA/ECDSA/Ed25519",              pqcAlt: "Replace with PQC-hybrid SSH key exchange; use ML-KEM-768 + X25519" },
+  { id: "c-libssh-api",         name: "libssh C API (SSH session/key)",       sev: "high",   re: /\bssh_new\s*\(\)|ssh_connect\s*\(|ssh_generate_keypair\s*\(|ssh_pki_generate\s*\(|ssh_key_type\s*\(|ssh_options_set\s*\(|SSH_KEYTYPE_RSA\b|SSH_KEYTYPE_ECDSA\b|ssh_userauth_publickey/g, desc: "libssh C API — SSH session and key operations (RSA/ECDSA/Ed25519)",    pqcAlt: "Migrate to PQC-hybrid SSH; use ML-KEM-768 for key encapsulation (RFC 9370)" },
+  { id: "java-eddsa-net-i2p",   name: "Java EdDSA / Ed25519 (net.i2p)",      sev: "high",   re: /net\.i2p\.crypto\.eddsa|\bEdDSAEngine\b|EdDSAPrivateKeySpec\b|EdDSAPublicKeySpec\b|EdDSASecurityProvider\b|\bnew\s+EdDSAPrivateKey|EdDSASigner\b/g,             desc: "Java net.i2p.crypto.eddsa (Ed25519) — used by Apache MINA SSHD",       pqcAlt: "Replace Ed25519 with ML-DSA (NIST FIPS 204) for post-quantum signatures" },
+  { id: "python-pyopenssl",     name: "Python pyOpenSSL classical key ops",   sev: "high",   re: /from\s+OpenSSL(?:\.crypto)?\s+import|OpenSSL\.crypto\.PKey\(\)|crypto\.TYPE_RSA\b|crypto\.TYPE_DSA\b|crypto\.TYPE_EC\b|crypto\.PKey\(\)|X509Req\s*\(\)|\bload_certificate\b|\bcrypto\.dump_privatekey|\bcrypto\.dump_publickey/g, desc: "Python pyOpenSSL — classical RSA/ECDSA/DSA key generation and handling",  pqcAlt: "Migrate to pyca/cryptography with ML-KEM-768 (FIPS 203) / ML-DSA (FIPS 204)" },
+  { id: "csharp-ecdh-create",   name: ".NET ECDiffieHellman key agreement",   sev: "high",   re: /ECDiffieHellman\.Create\s*\(|ECDiffieHellmanCng\b|\bnew\s+ECDiffieHellmanCng\s*\(|DeriveKeyMaterial\b|DeriveKeyFromHash\b|DeriveKeyFromHmac\b|DeriveKeyTls\s*\(/g,    desc: ".NET ECDiffieHellman (ECDH) key agreement — vulnerable to Shor's algorithm", pqcAlt: "Replace ECDH key agreement with ML-KEM-768 (NIST FIPS 203)" },
+  { id: "go-crypto-elliptic",   name: "Go crypto/elliptic curve operations",  sev: "high",   re: /elliptic\.P256\s*\(\)|elliptic\.P384\s*\(\)|elliptic\.P521\s*\(\)|elliptic\.Marshal\s*\(|elliptic\.Unmarshal\s*\(|elliptic\.GenerateKey\s*\(|\becdh\.P256\(\)|ecdh\.P384\(\)|ecdh\.P521\(\)/g,       desc: "Go crypto/elliptic and crypto/ecdh NIST curve operations",              pqcAlt: "Replace NIST curves with ML-KEM-768 (FIPS 203) for KEM or ML-DSA (FIPS 204) for signatures" },
+  { id: "java-pkcs11-classical", name: "Java PKCS#11 classical key provider",  sev: "high",   re: /sun\.security\.pkcs11|SunPKCS11\b|PKCS11\.getInstance\b|new\s+sun\.security\.pkcs11\.SunPKCS11|pkcs11\.jar|iaik\.pkcs\.pkcs11|iaik\.security\.provider\.IAIK|\bPKCS11KeyStore\b/g, desc: "Java PKCS#11 provider — hardware/software token storing RSA/EC keys",      pqcAlt: "Upgrade HSM/token firmware for PQC; use ML-KEM / ML-DSA where supported" },
+
 ];
 
 // ── Vulnerable dependencies ───────────────────────────────────────────────────
