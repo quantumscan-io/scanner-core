@@ -183,6 +183,40 @@ const PATTERNS = [
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
   { id: "sha256-kdf",   name: "SHA-256 as password KDF",  sev: "low",      re: /sha256.*(?:password|passphrase)\b|(?:password|passphrase).*sha256/i, alt: "Argon2id or bcrypt" }, // quantumscan-ignore
   { id: "dh-1024",      name: "DH 1024-bit params",       sev: "low",      re: /DHParameterSpec\s*\(\s*1024|generate_parameters.*1024|dhparam\s+1024/i, alt: "ML-KEM" }, // quantumscan-ignore
+
+  // ── Phase 3 additions: 2026-06-25 — filling false-negative gaps ──────────────
+  // sshj Java SSH library (source-code; Maven dep already in VULNERABLE_DEPS)
+  { id: "sshj-java", name: "Java sshj SSH (net.schmizz)", sev: "high",
+    re: /net\.schmizz\.sshj|new\s+SSHClient\s*\(\)|sshClient\.(?:connect|authPublickey|loadKnownHosts)\b|\.addHostKeyVerifier\s*\(|new\s+(?:PKCS8KeyFile|OpenSSHKeyFile)\s*\(/i,
+    alt: "Await sshj PQC KEX support; use ML-KEM-768 (FIPS 203) when available" },
+  // Rust openssl crate bindings (covers rsa::Rsa, ec::EcKey, dsa::Dsa, dh::Dh)
+  { id: "rust-openssl-crate", name: "Rust openssl crate (RSA/EC/DSA/DH)", sev: "high",
+    re: /openssl::(?:rsa::Rsa|ec::EcKey|dsa::Dsa|dh::Dh|pkey::PKey)(?:::<|::generate|::from_|::builder|::private_key)/i,
+    alt: "Replace with pqcrypto or oqs-rs crate; target ML-KEM (FIPS 203) for key exchange" },
+  // mbedTLS C/C++ library (widely used in embedded / IoT)
+  { id: "mbedtls-c", name: "mbedTLS RSA/ECDSA/DH (C/C++)", sev: "high",
+    re: /mbedtls_(?:rsa_init|ecdsa_init|pk_setup|pk_parse_key|ecp_gen_key|rsa_gen_key|ecdh_init|dhm_init|ssl_conf_own_cert)\s*\(/i,
+    alt: "Use mbedTLS 3.6+ with liboqs; enable CRYSTALS-Kyber (ML-KEM) and Dilithium (ML-DSA)" },
+  // wolfSSL / wolfCrypt C library
+  { id: "wolfssl-c", name: "wolfSSL / wolfCrypt RSA/ECDSA (C)", sev: "high",
+    re: /(?:wc_(?:RsaKeyGen|InitRsaKey|EccKeyGen|InitEccKey|DhGenerateKeyPair|DsaKeyGen)|wolfSSL_CTX_new|wolfSSL_new|wolfSSL_CTX_use_(?:RSAPrivateKey|certificate))\s*\(/i,
+    alt: "Use wolfSSL 5.0+ --enable-kyber for ML-KEM; --enable-dilithium for ML-DSA (FIPS 203/204)" },
+  // node-forge source code (package dep already in VULNERABLE_DEPS)
+  { id: "node-forge-src", name: "node-forge RSA/ECDSA (source usage)", sev: "high",
+    re: /forge\.pki\.rsa\.generateKeyPair|forge\.pki\.createCertificate|forge\.rsa\.generateKeyPair|forge\.pki\.(?:privateKey|publicKey)FromPem|require\s*\(\s*['"](node-)?forge['"]\s*\)/i,
+    alt: "Replace RSA/ECDSA calls with WebCrypto PQC APIs; target ML-KEM (FIPS 203) for KEM" },
+  // C# ECDiffieHellman key agreement (not covered by csharp-rsa-cng / csharp-rsa-create)
+  { id: "csharp-ecdh-cng", name: "C# ECDiffieHellman Key Agreement", sev: "high",
+    re: /ECDiffieHellman(?:Cng|OpenSsl)?\.Create\s*\(|new\s+ECDiffieHellmanCng\s*\(|\.DeriveKeyMaterial\s*\(|\.DeriveKeyFromHash\s*\(|\.DeriveKeyTls\s*\(/i,
+    alt: "Replace with ML-KEM-768 (FIPS 203) via .NET 10 PQC preview or BouncyCastle PQC" },
+  // libgcrypt C library (used in GnuPG, systemd, many Linux crypto paths)
+  { id: "libgcrypt-c", name: "libgcrypt RSA/ECC/DSA (C)", sev: "high",
+    re: /gcry_pk_(?:genkey|sign|encrypt|decrypt)\s*\(|gcry_sexp_build[^;]*["'](?:rsa|ecdsa|dsa|ecdh)["']|GCRY_PK_(?:RSA|ECC|DSA|ECDH)\b/i,
+    alt: "Use liboqs or GnuPG PQC branch when available; target ML-KEM and ML-DSA (FIPS 203/204)" },
+  // Java JSSE KeyManagerFactory / TrustManagerFactory (catches server TLS setup false negatives)
+  { id: "java-jsse-trustmgr", name: "Java JSSE KeyManager/TrustManager setup", sev: "high",
+    re: /KeyManagerFactory\.getInstance\s*\(\s*["'](?:SunX509|PKIX|NewSunX509)["']\)|TrustManagerFactory\.getInstance\s*\(\s*["'](?:SunX509|PKIX|SunPKIX)["']\)|KeyStore\.getInstance\s*\(\s*["'](?:JKS|PKCS12|BKS)["']\)/i,
+    alt: "Audit key store for PQC-safe keys; target ML-KEM/ML-DSA certs when JDK adds FIPS 203/204" },
 ];
 
 // ── Vulnerable dependencies ───────────────────────────────────────────────────
