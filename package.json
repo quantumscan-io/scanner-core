@@ -1,6 +1,6 @@
 {
   "name": "quantumscan",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase, Solidity contracts, and Substrate/Polkadot pallets",
   "keywords": [
     "post-quantum",
