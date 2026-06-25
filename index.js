@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.0";
+const VERSION = "1.9.1";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -174,6 +174,10 @@ const PATTERNS = [
   { id: "scala-bouncycastle-rsa-ec", name: "Scala Bouncy Castle RSA/EC key operations", sev: "high", re: /RSAKeyPairGenerator|ECKeyPairGenerator|new\s+KeyPairGenerator\.getInstance\s*\(\s*["']RSA["']|new\s+KeyPairGenerator\.getInstance\s*\(\s*["']EC["']|org\.bouncycastle\.crypto\.generators\.(RSA|EC)KeyPairGenerator/i, alt: "ML-KEM-768 or ML-DSA-65 (NIST FIPS 203/204)" },
   { id: "rust-snow-noise-protocol", name: "Rust snow Noise Protocol (DH-based)", sev: "high", re: /snow::(Builder|HandshakeState|TransportState)|NoiseBuilder::new|\bNoise(IK|XX|KK|NK|XK|N|K|X)\b|params\s*:\s*NoiseParams|25519.*ChaChaPoly|snow::params::NoiseParams/i, alt: "PQ Noise with Kyber/ML-KEM via pqnoise or hybrid extensions" },
   { id: "libsodium-box-scalarmult", name: "libsodium Curve25519 box/scalarmult", sev: "high", re: /crypto_box_keypair\s*\(|crypto_box_seal\s*\(|crypto_scalarmult_base\s*\(|crypto_scalarmult\s*\(|crypto_kx_keypair\s*\(|crypto_kx_client_session_keys\s*\(|crypto_kx_server_session_keys\s*\(/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-25
+  { id: "solidity-erc1271-isvalidsignature", name: "Solidity ERC-1271 isValidSignature (ECDSA)", sev: "high", re: /isValidSignature\s*\(\s*bytes32\s*,\s*bytes\s*(memory|calldata)?\s*\)|IERC1271\s*\.|ERC1271\s*\.|SignatureChecker\s*\.\s*isValidSignatureNow|_isValidSignature\s*\([^)]*bytes32[^)]*bytes\s*(memory|calldata)?\s*\)/i, alt: "ML-DSA-65 (NIST FIPS 204) with contract wallet upgrade path" },
+  { id: "solidity-erc4337-userop-ecdsa", name: "Solidity ERC-4337 UserOperation ECDSA validation", sev: "high", re: /validateUserOp\s*\(\s*UserOperation\s|IAccount\s*\.\s*validateUserOp|_validateSignature\s*\(\s*UserOperation|userOp\s*\.\s*signature\s*\)|getUserOpHash\s*\(|EntryPoint\s*\.\s*handleOps/i, alt: "ML-DSA-65 (NIST FIPS 204) account abstraction with post-quantum signature validation" },
+  { id: "zk-ecdsa-groth16-plonk-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /ECDSAVerify\s*\(|ecdsa_verify_circuit|circom.*ECDSA|snarkjs.*ecdsa|plonk.*ECDSAVerifier|groth16.*verifyECDSA|prove_ecdsa_signature|circuit.*ecrecover|zk.*ecdsa.*proof/i, alt: "ML-DSA-65 (NIST FIPS 204) with post-quantum ZK proof systems (STARKs, lattice-based ZK)" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
