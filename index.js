@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.1";
+const VERSION = "1.9.2";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -178,6 +178,11 @@ const PATTERNS = [
   { id: "solidity-erc1271-isvalidsignature", name: "Solidity ERC-1271 isValidSignature (ECDSA)", sev: "high", re: /isValidSignature\s*\(\s*bytes32\s*,\s*bytes\s*(memory|calldata)?\s*\)|IERC1271\s*\.|ERC1271\s*\.|SignatureChecker\s*\.\s*isValidSignatureNow|_isValidSignature\s*\([^)]*bytes32[^)]*bytes\s*(memory|calldata)?\s*\)/i, alt: "ML-DSA-65 (NIST FIPS 204) with contract wallet upgrade path" },
   { id: "solidity-erc4337-userop-ecdsa", name: "Solidity ERC-4337 UserOperation ECDSA validation", sev: "high", re: /validateUserOp\s*\(\s*UserOperation\s|IAccount\s*\.\s*validateUserOp|_validateSignature\s*\(\s*UserOperation|userOp\s*\.\s*signature\s*\)|getUserOpHash\s*\(|EntryPoint\s*\.\s*handleOps/i, alt: "ML-DSA-65 (NIST FIPS 204) account abstraction with post-quantum signature validation" },
   { id: "zk-ecdsa-groth16-plonk-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /ECDSAVerify\s*\(|ecdsa_verify_circuit|circom.*ECDSA|snarkjs.*ecdsa|plonk.*ECDSAVerifier|groth16.*verifyECDSA|prove_ecdsa_signature|circuit.*ecrecover|zk.*ecdsa.*proof/i, alt: "ML-DSA-65 (NIST FIPS 204) with post-quantum ZK proof systems (STARKs, lattice-based ZK)" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-26
+  { id: "python-pycrypto-rsa-dsa", name: "PyCrypto RSA/DSA key operations (legacy)", sev: "high", re: /from\s+Crypto\.PublicKey\s+import\s+(RSA|DSA)|Crypto\.PublicKey\.(RSA|DSA)\.generate\s*\(|Crypto\.PublicKey\.(RSA|DSA)\.importKey\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 (NIST FIPS 203/204) via liboqs-python" },
+  { id: "golang-age-x25519", name: "Go age encryption (X25519)", sev: "high", re: /filippo\.io/age|age\.GenerateX25519Identity\s*\(|age\.NewIdentity\s*\(|age\.ParseX25519Identity\s*\(|age\.X25519Recipient/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs-go or circl" },
+  { id: "csharp-rsa-signdata", name: "C# RSA SignData/VerifyData", sev: "high", re: /RSA\.SignData\s*\(|RSA\.VerifyData\s*\(|RSACryptoServiceProvider\.SignData\s*\(|RSACng\.SignData\s*\(|RSA\.Create\s*\(\s*\)\.SignData/i, alt: "ML-DSA-65 (NIST FIPS 204) via BouncyCastle PQC or liboqs.NET" },
+  { id: "java-jce-rsa-cipher", name: "Java JCE RSA Cipher operations", sev: "high", re: /Cipher\.getInstance\s*\(\s*["']RSA|Cipher\.getInstance\s*\(\s*["']RSA/ECB|Cipher\.getInstance\s*\(\s*["']RSA/NONE|RSA/ECB/PKCS1Padding|RSA/ECB/OAEPWithSHA/i, alt: "ML-KEM-768 (NIST FIPS 203) via BouncyCastle PQC provider" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
