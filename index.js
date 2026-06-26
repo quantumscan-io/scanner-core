@@ -919,7 +919,10 @@ function tryCreatePR(targetDir, fixesPath) {
   catch { return null; }
 
   const branch = `quantumscan/pqc-fixes-${Date.now()}`;
+  let origBranch = "";
   try {
+    origBranch = execSync("git branch --show-current", { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] })
+      .toString().trim();
     execSync(`git checkout -b ${branch}`, { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] });
     execSync(`git add "${fixesPath}"`, { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] });
     execSync(`git commit -m "chore: add QuantumScan PQC migration guide (QUANTUMSCAN_FIXES.md)"`, { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] });
@@ -929,7 +932,13 @@ function tryCreatePR(targetDir, fixesPath) {
       { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] }
     ).toString().trim();
     return prUrl;
-  } catch { return null; }
+  } catch {
+    return null;
+  } finally {
+    if (origBranch) {
+      try { execSync(`git checkout ${origBranch}`, { cwd: repoRoot, stdio: ["pipe","pipe","pipe"] }); } catch {}
+    }
+  }
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -1066,6 +1075,9 @@ function main() {
         console.log(`\n${C.green}✓  --fix: no findings to remediate.${C.reset}\n`);
       }
     }
+  } else if (fixMode) {
+    // --fix + --json or --sarif: write migration guide to disk silently (no console output to avoid polluting structured output)
+    writeFixes(allFindings, targetDir, score);
   }
 
   exit(noFail || allFindings.length === 0 ? 0 : 1);
