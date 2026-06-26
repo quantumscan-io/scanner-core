@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.2";
+const VERSION = "1.9.3";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -183,6 +183,12 @@ const PATTERNS = [
   { id: "golang-age-x25519", name: "Go age encryption (X25519)", sev: "high", re: /filippo\.io/age|age\.GenerateX25519Identity\s*\(|age\.NewIdentity\s*\(|age\.ParseX25519Identity\s*\(|age\.X25519Recipient/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs-go or circl" },
   { id: "csharp-rsa-signdata", name: "C# RSA SignData/VerifyData", sev: "high", re: /RSA\.SignData\s*\(|RSA\.VerifyData\s*\(|RSACryptoServiceProvider\.SignData\s*\(|RSACng\.SignData\s*\(|RSA\.Create\s*\(\s*\)\.SignData/i, alt: "ML-DSA-65 (NIST FIPS 204) via BouncyCastle PQC or liboqs.NET" },
   { id: "java-jce-rsa-cipher", name: "Java JCE RSA Cipher operations", sev: "high", re: /Cipher\.getInstance\s*\(\s*["']RSA|Cipher\.getInstance\s*\(\s*["']RSA/ECB|Cipher\.getInstance\s*\(\s*["']RSA/NONE|RSA/ECB/PKCS1Padding|RSA/ECB/OAEPWithSHA/i, alt: "ML-KEM-768 (NIST FIPS 203) via BouncyCastle PQC provider" },
+    // AUTO-ADDED by scanner-evolution-agent 2026-06-26
+  { id: "python-ecdsa-package", name: "Python ecdsa package key operations", sev: "high", re: /import\s+ecdsa|from\s+ecdsa\s+import|ecdsa\.SigningKey\.generate\s*\(|ecdsa\.SECP256k1|ecdsa\.NIST(192|224|256|384|521)p|SigningKey\.from_pem\s*\(|VerifyingKey\.from_pem\s*\(/i, alt: "ML-DSA-65 (NIST FIPS 204) via liboqs-python or PQCrypto" },
+  { id: "gcp-kms-classical", name: "GCP Cloud KMS classical key operations", sev: "high", re: /google\.cloud\.kms|CryptoKeyVersionAlgorithm\.(RSA_|EC_SIGN_P(256|384)_SHA(256|384|512))|KeyManagementServiceClient|create_crypto_key.*algorithm.*RSA|create_crypto_key.*algorithm.*EC_SIGN/i, alt: "Evaluate post-quantum KMS solutions or hybrid classical+PQC key encapsulation" },
+  { id: "java-bc-rsa-ec-keygen", name: "Bouncy Castle RSA/EC KeyPairGenerator", sev: "high", re: /org\.bouncycastle\.jce\.provider\.BouncyCastleProvider|KeyPairGenerator\.getInstance\s*\(\s*["'](RSA|EC|ECDSA|ECDH)["'].*BouncyCastle|new\s+BouncyCastleProvider\s*\(\s*\)|Security\.addProvider\s*\(\s*new\s+BouncyCastleProvider/i, alt: "Bouncy Castle PQC provider with ML-KEM, ML-DSA, or SLH-DSA" },
+  { id: "solidity-erc4337-userop", name: "Solidity ERC-4337 UserOperation ECDSA validation", sev: "critical", re: /validateUserOp\s*\(\s*UserOperation\s|IAccount\.validateUserOp|_validateSignature\s*\(\s*UserOperation|ecrecover\s*\([^)]*userOp|ECDSA\.recover\s*\([^)]*userOp\.signature/i, alt: "Quantum-resistant account abstraction with ML-DSA signature schemes in custom validation logic" },
+  { id: "wormhole-layerzero-sig-relay", name: "LayerZero / Wormhole cross-chain ECDSA signature relay", sev: "critical", re: /ILayerZeroEndpoint\.send\s*\(|lzReceive\s*\([^)]*bytes\s+memory\s+_payload|wormhole\.publishMessage|parseAndVerify(VM|VAA)\s*\(|verifySignatures\s*\([^)]*guardianSet|LayerZeroEndpoint\s*\(|IWormhole\.parseAndVerifyVM/i, alt: "Quantum-resistant cross-chain messaging with ML-DSA threshold signatures or hash-based commitments" },
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
