@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync, existsSync } from "fs";
+﻿import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
@@ -180,9 +180,9 @@ const PATTERNS = [
   { id: "zk-ecdsa-groth16-plonk-circuit", name: "ZK ECDSA signature verification circuit (Groth16/PLONK)", sev: "high", re: /ECDSAVerify\s*\(|ecdsa_verify_circuit|circom.*ECDSA|snarkjs.*ecdsa|plonk.*ECDSAVerifier|groth16.*verifyECDSA|prove_ecdsa_signature|circuit.*ecrecover|zk.*ecdsa.*proof/i, alt: "ML-DSA-65 (NIST FIPS 204) with post-quantum ZK proof systems (STARKs, lattice-based ZK)" },
     // AUTO-ADDED by scanner-evolution-agent 2026-06-26
   { id: "python-pycrypto-rsa-dsa", name: "PyCrypto RSA/DSA key operations (legacy)", sev: "high", re: /from\s+Crypto\.PublicKey\s+import\s+(RSA|DSA)|Crypto\.PublicKey\.(RSA|DSA)\.generate\s*\(|Crypto\.PublicKey\.(RSA|DSA)\.importKey\s*\(/i, alt: "ML-KEM-768 or ML-DSA-65 (NIST FIPS 203/204) via liboqs-python" },
-  { id: "golang-age-x25519", name: "Go age encryption (X25519)", sev: "high", re: /filippo\.io/age|age\.GenerateX25519Identity\s*\(|age\.NewIdentity\s*\(|age\.ParseX25519Identity\s*\(|age\.X25519Recipient/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs-go or circl" },
+  { id: "golang-age-x25519", name: "Go age encryption (X25519)", sev: "high", re: /filippo\.io\/age|age\.GenerateX25519Identity\s*\(|age\.NewIdentity\s*\(|age\.ParseX25519Identity\s*\(|age\.X25519Recipient/i, alt: "ML-KEM-768 (NIST FIPS 203) via liboqs-go or circl" },
   { id: "csharp-rsa-signdata", name: "C# RSA SignData/VerifyData", sev: "high", re: /RSA\.SignData\s*\(|RSA\.VerifyData\s*\(|RSACryptoServiceProvider\.SignData\s*\(|RSACng\.SignData\s*\(|RSA\.Create\s*\(\s*\)\.SignData/i, alt: "ML-DSA-65 (NIST FIPS 204) via BouncyCastle PQC or liboqs.NET" },
-  { id: "java-jce-rsa-cipher", name: "Java JCE RSA Cipher operations", sev: "high", re: /Cipher\.getInstance\s*\(\s*["']RSA|Cipher\.getInstance\s*\(\s*["']RSA/ECB|Cipher\.getInstance\s*\(\s*["']RSA/NONE|RSA/ECB/PKCS1Padding|RSA/ECB/OAEPWithSHA/i, alt: "ML-KEM-768 (NIST FIPS 203) via BouncyCastle PQC provider" },
+  { id: "java-jce-rsa-cipher", name: "Java JCE RSA Cipher operations", sev: "high", re: /Cipher\.getInstance\s*\(\s*["']RSA|Cipher\.getInstance\s*\(\s*["']RSA\/ECB|Cipher\.getInstance\s*\(\s*["']RSA\/NONE|RSA\/ECB\/PKCS1Padding|RSA\/ECB\/OAEPWithSHA/i, alt: "ML-KEM-768 (NIST FIPS 203) via BouncyCastle PQC provider" },
     // AUTO-ADDED by scanner-evolution-agent 2026-06-26
   { id: "python-ecdsa-package", name: "Python ecdsa package key operations", sev: "high", re: /import\s+ecdsa|from\s+ecdsa\s+import|ecdsa\.SigningKey\.generate\s*\(|ecdsa\.SECP256k1|ecdsa\.NIST(192|224|256|384|521)p|SigningKey\.from_pem\s*\(|VerifyingKey\.from_pem\s*\(/i, alt: "ML-DSA-65 (NIST FIPS 204) via liboqs-python or PQCrypto" },
   { id: "gcp-kms-classical", name: "GCP Cloud KMS classical key operations", sev: "high", re: /google\.cloud\.kms|CryptoKeyVersionAlgorithm\.(RSA_|EC_SIGN_P(256|384)_SHA(256|384|512))|KeyManagementServiceClient|create_crypto_key.*algorithm.*RSA|create_crypto_key.*algorithm.*EC_SIGN/i, alt: "Evaluate post-quantum KMS solutions or hybrid classical+PQC key encapsulation" },
@@ -972,5 +972,6 @@ function main() {
 }
 
 main();
+
 
 
