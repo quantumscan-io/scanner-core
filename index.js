@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.4";
+const VERSION = "1.10.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -405,6 +405,94 @@ const SKIP_DIRS = new Set([
   "tmp", "temp", ".turbo",
 ]);
 
+// ── Crypto-Agility patterns ───────────────────────────────────────────────────
+// Anti-patterns: algorithm string literals hardcoded into function calls
+const AGILITY_ANTI_PATTERNS = [
+  { id: "node-createcipher-literal",    re: /crypto\.create(?:Cipher|Decipher)iv?\s*\(\s*['"][a-z0-9_-]{3,}['"]/i },
+  { id: "node-createhash-literal",      re: /crypto\.createHash\s*\(\s*['"][a-z0-9_-]{3,}['"]/i },
+  { id: "node-createsign-literal",      re: /crypto\.create(?:Sign|Verify)\s*\(\s*['"][a-z0-9_-]{3,}['"]/i },
+  { id: "node-generatekeypair-literal", re: /generateKeyPair(?:Sync)?\s*\(\s*['"](?:rsa|ec|dsa|ed25519|x25519)['"]/i },
+  { id: "python-hashlib-literal",       re: /hashlib\.(?:md5|sha1|sha224|sha256|sha384|sha512|sha3_\d+)\s*\(/i },
+  { id: "python-hashlib-new-literal",   re: /hashlib\.new\s*\(\s*['"][a-z0-9_-]{2,}['"]/i },
+  { id: "java-messagedigest-literal",   re: /MessageDigest\.getInstance\s*\(\s*["'][A-Z0-9/-]{2,}["']/i },
+  { id: "java-cipher-literal",          re: /Cipher\.getInstance\s*\(\s*["'][A-Za-z0-9/\-_]{3,}["']/i },
+  { id: "java-keypairgenerator-literal",re: /KeyPairGenerator\.getInstance\s*\(\s*["'][A-Za-z0-9]{2,}["']/i },
+  { id: "java-keyfactory-literal",      re: /KeyFactory\.getInstance\s*\(\s*["'][A-Za-z0-9]{2,}["']/i },
+  { id: "dotnet-aes-create-literal",    re: /(?:Aes|DES|TripleDES|Rijndael)\.Create\s*\(\s*["'][A-Za-z0-9]{3,}["']/i },
+  { id: "dotnet-rsa-create-literal",    re: /RSA\.Create\s*\(\s*\d{4,}/i },
+  { id: "go-cipher-literal",            re: /aes\.NewCipher\s*\(|cipher\.NewGCM\s*\(/i },
+  { id: "php-openssl-literal",          re: /openssl_(?:encrypt|decrypt)\s*\([^)]*['"][A-Z0-9_-]{3,}['"][^)]*\)/i },
+  { id: "hardcoded-keysize-rsa",        re: /(?:RSA|rsa)[\s_-]*(?:key[\s_-]*)?(?:size|bits|length)\s*[=:]\s*(?:1024|2048|4096)\b(?!\s*\*?\s*(?:config|env|process|settings|get|read))/i },
+];
+
+// Positive signals: abstraction layers that enable fast algorithm rotation
+const AGILITY_POSITIVE_PATTERNS = [
+  { signalType: "aws-kms",         re: /new\s+KMSClient\s*\(|kms\.(?:encrypt|decrypt|generate_data_key)\s*\(|@aws-sdk\/client-kms/i },
+  { signalType: "hashicorp-vault", re: /vault\.(?:write|read|logical|secrets)\s*\(|hvac\.Client\s*\(|require\s*\(\s*['"]node-vault['"]\s*\)/i },
+  { signalType: "gcp-kms",         re: /google\.cloud\.kms|CloudKMS\s*\(|KeyManagementServiceClient\s*\(|@google-cloud\/kms/i },
+  { signalType: "azure-keyvault",  re: /AzureKeyVault|SecretClient\s*\(|CryptographyClient\s*\(|@azure\/keyvault/i },
+  { signalType: "google-tink",     re: /from\s+['"]tink-crypto|tink\.Aead\b|tink\.Mac\b|KeysetHandle\b|TinkConfig\b|AeadKeyTemplates\b/i },
+  { signalType: "env-algo-config", re: /process\.env\.[A-Z_]*(?:ALGO(?:RITHM)?|CIPHER|CRYPTO|KEY_TYPE|HASH|DIGEST|CURVE)\b|os\.environ\[['"][^'"]*(?:ALGO|CIPHER|CRYPTO|CURVE)[^'"]*['"]\]/i },
+  { signalType: "config-driven",   re: /config(?:uration)?\.\w*(?:algorithm|cipher|crypto|keyType|hashAlgo|curve)\b/i },
+  { signalType: "pkcs11-hsm",      re: /pkcs11\.\w+\s*\(|PKCS11\b|\.HSM\.|hsm\.(?:encrypt|decrypt|sign)\s*\(/i },
+  { signalType: "spring-crypto",   re: /@Value\s*\(\s*['"]\$\{[^}]*(?:algorithm|cipher|crypto)[^}]*\}['"]\s*\)|@ConfigurationProperties.*crypto/i },
+  { signalType: "crypto-interface", re: /interface\s+\w*(?:Crypto|Cipher|Signer|Encryptor|KeyProvider)\w*\s*\{|class\s+\w*(?:Crypto|Cipher|Signer|Encryptor)(?:Adapter|Impl|Provider|Factory)\w*\b/i },
+];
+
+function scanFileForAgility(content, relPath) {
+  const hardcoded = [];
+  const agile = [];
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+    for (const p of AGILITY_ANTI_PATTERNS) {
+      if (p.re.test(line)) { hardcoded.push({ file: relPath, line: i + 1, patternId: p.id, context: line.trim().slice(0, 100) }); break; }
+    }
+    for (const p of AGILITY_POSITIVE_PATTERNS) {
+      if (p.re.test(line)) { agile.push({ file: relPath, line: i + 1, signalType: p.signalType, context: line.trim().slice(0, 100) }); break; }
+    }
+  }
+  return { hardcoded, agile };
+}
+
+function computeAgilityScore(hardcodedCount, agileSignalCount) {
+  if (hardcodedCount === 0 && agileSignalCount === 0) return 50;
+  const penalty = Math.min(75, hardcodedCount * 5);
+  const bonus   = Math.min(35, agileSignalCount * 10);
+  return Math.max(0, Math.min(100, 80 - penalty + bonus));
+}
+
+const AGILITY_LABEL_MAP = {
+  critical_rigidity: "Critical Rigidity",
+  low_agility:       "Low Agility",
+  moderate_agility:  "Moderate Agility",
+  high_agility:      "High Agility",
+  crypto_native:     "Crypto-Native",
+};
+
+function agilityLabel(score) {
+  if (score <= 30) return "critical_rigidity";
+  if (score <= 55) return "low_agility";
+  if (score <= 75) return "moderate_agility";
+  if (score <= 90) return "high_agility";
+  return "crypto_native";
+}
+
+function buildAgilityAudit(allHardcoded, allAgile) {
+  const score = computeAgilityScore(allHardcoded.length, allAgile.length);
+  const label = agilityLabel(score);
+  return { score, label, displayLabel: AGILITY_LABEL_MAP[label], hardcodedCount: allHardcoded.length, agileSignalCount: allAgile.length };
+}
+
+function agilityColor(score) {
+  if (score <= 30) return C.red;
+  if (score <= 55) return C.orange;
+  if (score <= 75) return C.yellow;
+  return C.green;
+}
+
 // ── Crypto library detector ───────────────────────────────────────────────────
 const CRYPTO_LIB_HINTS = /\b(crypto|cipher|ssl|tls|ssh|rsa|ecdsa|ecdh|dsa|dh|pgp|gpg|tink|botan|openssl|libsodium|nacl|bcrypt|argon|signal|noise|kyber|dilithium|falcon|sphincs|pqcrypto|liboqs|mina.?sshd|jsch|paramiko)\b/i; // quantumscan-ignore
 
@@ -689,7 +777,7 @@ function visLen(str) { return str.replace(/\x1b\[[0-9;]*m/g, "").length; }
 function padEnd(str, len) { return str + " ".repeat(Math.max(0, len - visLen(str))); }
 function hr() { return "─".repeat(58); }
 
-function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false) {
+function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false, agility = null) {
   if (!substrateMode) {
     console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
     console.log(`${C.cyan}${APP_URL}${C.reset}`);
@@ -750,6 +838,11 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
   console.log(hr());
   console.log(`Risk Score  ${C.bold}${score}/100${C.reset}  ${riskLabel(score)}`);
 
+  if (agility) {
+    const ac = agilityColor(agility.score);
+    console.log(`Agility     ${C.bold}${agility.score}/100${C.reset}  ${ac}${agility.displayLabel}${C.reset}  ${C.dim}${agility.hardcodedCount} hardcoded · ${agility.agileSignalCount} abstracted${C.reset}`);
+  }
+
   if (findings.length > 0) {
     console.log(`\n${C.dim}Migrate to: ML-KEM (key encap, FIPS 203) · ML-DSA (signatures, FIPS 204)${C.reset}`); // quantumscan-ignore
     console.log(`${C.dim}Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.${C.reset}`);
@@ -761,7 +854,7 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
 }
 
 // ── JSON output ───────────────────────────────────────────────────────────────
-function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib, substrateInfo = null) {
+function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib, substrateInfo = null, agility = null) {
   const summary = { riskScore: score };
   for (const sev of SEV_ORDER) summary[sev] = findings.filter(f => f.sev === sev).length;
   summary.dependencies = findings.filter(f => f.type === "dependency").length;
@@ -773,6 +866,7 @@ function printJson(findings, totalFiles, scannableCount, targetDir, score, isCry
       ? "partial — crypto library or low score: implementation-level patterns may not be fully covered"
       : "standard",
     ...(substrateInfo ? { substrate: substrateInfo } : {}),
+    ...(agility ? { cryptoAgility: { score: agility.score, label: agility.label, hardcodedCount: agility.hardcodedCount, agileSignalCount: agility.agileSignalCount } } : {}),
     summary,
     findings: findings.map(f => ({
       file: f.file, line: f.line,
@@ -965,10 +1059,26 @@ function main() {
   const score          = calcScore(allFindings);
   const isCryptoLib    = mayBeCryptoLib(targetDir, allFiles);
 
+  // Crypto-Agility audit (runs over code files only)
+  const allHardcoded = [];
+  const allAgile = [];
+  if (!noCode) {
+    for (const fp of scannableFiles) {
+      let content = "";
+      try { content = readFileSync(fp, "utf8"); } catch { continue; }
+      if (content.length > 500_000) continue;
+      const relPath = relative(targetDir, fp).replace(/\\/g, "/");
+      const { hardcoded, agile } = scanFileForAgility(content, relPath);
+      allHardcoded.push(...hardcoded);
+      allAgile.push(...agile);
+    }
+  }
+  const agility = buildAgilityAudit(allHardcoded, allAgile);
+
   if (sarifMode) {
     printSarif(allFindings, targetDir);
   } else if (jsonMode) {
-    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib, substrateInfo);
+    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib, substrateInfo, agility);
   } else {
     if (substrateMode) {
       console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Substrate/Polkadot PQC Analysis`);
@@ -984,7 +1094,7 @@ function main() {
       console.log(`Patterns   ${C.gray}19 Substrate-specific PQC patterns active${C.reset}`);
       console.log("");
     }
-    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode);
+    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode, agility);
     if (badgeMode) {
       const slug = detectRepoSlug(targetDir);
       if (slug) printBadge(slug, targetDir);
