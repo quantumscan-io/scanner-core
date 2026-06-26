@@ -1075,8 +1075,10 @@ function main() {
         console.log(`\n${C.green}✓  --fix: no findings to remediate.${C.reset}\n`);
       }
     }
-  } else if (fixMode) {
-    // --fix + --json or --sarif: write migration guide to disk silently (no console output to avoid polluting structured output)
+  }
+
+  // --fix + --json/--sarif: write file silently (no console output to avoid polluting structured output)
+  if (fixMode && silent) {
     writeFixes(allFindings, targetDir, score);
   }
 
