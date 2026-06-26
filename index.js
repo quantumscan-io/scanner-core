@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.2";
+const VERSION = "2.0.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -663,7 +663,7 @@ function visLen(str) { return str.replace(/\x1b\[[0-9;]*m/g, "").length; }
 function padEnd(str, len) { return str + " ".repeat(Math.max(0, len - visLen(str))); }
 function hr() { return "─".repeat(58); }
 
-function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false) {
+function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false, verboseMode = false) {
   if (!substrateMode) {
     console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
     console.log(`${C.cyan}${APP_URL}${C.reset}`);
@@ -701,6 +701,9 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
           const name = sevColor(f.sev) + f.name + C.reset;
           const snip = f.match ? `  ${C.dim}\`${f.match}\`${C.reset}` : "";
           console.log(`${padEnd(loc, 44)}${padEnd(name, 28)}${snip}`);
+          if (verboseMode) {
+            console.log(`  ${C.dim}rule: ${f.id}${f.alt ? `  →  ${f.alt}` : ""}${C.reset}`);
+          }
         }
         if (group.length > 25) console.log(`  ${C.gray}… +${group.length - 25} more${C.reset}`);
         console.log("");
@@ -868,6 +871,7 @@ Options:
   --no-code          Skip source code scanning (only scan dependencies)
   --badge            Print README badge markdown after scan
   --no-fail          Exit 0 even when findings are found (default: exit 1)
+  --verbose          Show rule ID and full matched context per finding
   --version          Show version
   --help             Show this help
 
@@ -882,6 +886,7 @@ Examples:
   npx quantumscan . --badge
   npx quantumscan /path/to/polkadot-repo --substrate
   npx quantumscan /path/to/project --json | jq '.summary'
+  npx quantumscan . --verbose
 
 Exit codes:
   0   No findings (or --no-fail)
@@ -905,6 +910,7 @@ function main() {
   const noDeps         = args.includes("--no-deps");
   const noCode         = args.includes("--no-code");
   const noFail         = args.includes("--no-fail");
+  const verboseMode    = args.includes("--verbose");
   const pathArg        = args.find(a => !a.startsWith("-")) ?? ".";
 
   // Inject Substrate patterns when --substrate flag is set
@@ -958,7 +964,7 @@ function main() {
       console.log(`Patterns   ${C.gray}19 Substrate-specific PQC patterns active${C.reset}`);
       console.log("");
     }
-    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode);
+    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode, verboseMode);
     if (badgeMode) {
       const slug = detectRepoSlug(targetDir);
       if (slug) printBadge(slug, targetDir);
