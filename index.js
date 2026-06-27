@@ -211,6 +211,20 @@ const PATTERNS = [
   { id: "csharp-ecdh-cng",          name: "C# ECDiffieHellman key agreement (CNG)",                        sev: "high", re: /ECDiffieHellmanCng\.Create\s*\(|new\s+ECDiffieHellmanCng\s*\(|ECDiffieHellman\.Create\s*\(|DeriveKeyMaterial\s*\(|DeriveKeyFromHash\s*\(|DeriveKeyFromHmac\s*\(/i, alt: "ML-KEM-768 (NIST FIPS 203) — no quantum-safe ECDH in .NET yet; use hybrid" }, // quantumscan-ignore
   { id: "libgcrypt-c",              name: "libgcrypt C RSA/EC keygen (GnuPG)",                             sev: "high", re: /gcry_pk_genkey\s*\(|gcry_sexp_build\s*\(.*GCRY_PK|GCRY_PK_RSA\b|GCRY_PK_ECC\b|GCRY_PK_DSA\b|gcry_pk_sign\s*\(|gcry_pk_encrypt\s*\(|gcry_pk_decrypt\s*\(|gcry_mpi_new\s*\(/i, alt: "ML-KEM-768 / ML-DSA-65 via liboqs; monitor GnuPG PQC roadmap" }, // quantumscan-ignore
   { id: "java-jsse-trustmgr",       name: "Java JSSE KeyStore JKS / SunX509 init",                        sev: "high", re: /KeyStore\.getInstance\s*\(\s*["'](?:JKS|BKS|PKCS12)["']\s*\)|KeyManagerFactory\.getInstance\s*\(\s*["']SunX509["']\s*\)|TrustManagerFactory\.getInstance\s*\(\s*["'](?:SunX509|PKIX)["']\s*\)|SSLContext\.init\s*\(/i, alt: "Migrate to PQC-capable KeyStore via Bouncy Castle bcpqc; PKCS12 supports ML-DSA" }, // quantumscan-ignore
+  // CRITICAL — implementation flaws (static IV / weak entropy / PRNG)
+  { id: "static-gcm-iv",       name: "AES-GCM with static/constant IV (nonce reuse destroys confidentiality)", sev: "critical",
+    re: /createCipheriv\s*\(\s*['"][^'"]*gcm[^'"]*['"]\s*,[^,)]{1,80},\s*(?:Buffer\.alloc\s*\(\s*\d+\s*\)|Buffer\.from\s*\(\s*['"][^'"]{1,32}['"](?:\s*,\s*['"]hex['"])?\s*\)|new\s+Uint8Array\s*\(\s*\d+\s*\))/i,
+    alt: "Always use crypto.randomBytes(12) for AES-GCM IV (NIST SP 800-38D)" }, // quantumscan-ignore
+  { id: "zero-iv-variable",    name: "Zero-filled IV/nonce variable (no entropy)", sev: "critical",
+    re: /(?:^|[^\w])(?:iv|nonce|counter)\s*=\s*(?:bytes\s*\(\s*\d+\s*\)|Buffer\.alloc\s*\(\s*\d+\s*\)|new\s+Uint8Array\s*\(\s*\d+\s*\))/i,
+    alt: "Generate with os.urandom(12) / crypto.randomBytes(12) / getrandom()" }, // quantumscan-ignore
+  { id: "prng-to-crypto-var",  name: "Python/C PRNG directly assigned to cryptographic variable", sev: "critical",
+    re: /(?:key|iv|nonce|salt|secret|token)\s*=.*\brandom\.(?:randint|random|getrandbits|randbytes)\s*\(|(?:key|iv|nonce|salt)\s*=\s*(?:chr|str)\s*\(\s*rand\s*\(/i,
+    alt: "Use secrets.token_bytes() (Python) or getrandom()/arc4random() (C)" }, // quantumscan-ignore
+  // HIGH — missing KMS sourcing for critical keys
+  { id: "hardcoded-master-key", name: "Hardcoded master/signing/JWT key literal (not from KMS or env)", sev: "high",
+    re: /(?:master_key|root_key|signing_key|hmac_secret|jwt_secret|app_secret)\s*=\s*["'`][A-Za-z0-9+\/=_\-]{16,}["'`]/i,
+    alt: "Load from AWS KMS, HashiCorp Vault, or env var (process.env / os.environ)" }, // quantumscan-ignore
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore
