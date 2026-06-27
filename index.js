@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
 
-const VERSION = "1.9.4";
+const VERSION = "1.9.5";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -64,6 +64,10 @@ const PATTERNS = [
   { id: "blowfish",     name: "Blowfish",                 sev: "medium",   re: /\bBlowfish\b|bf_cbc|BF_KEY\b|AES\.MODE_BF/i }, // quantumscan-ignore
   { id: "math-random",  name: "Math.random in crypto",    sev: "medium",   re: /Math\.random\(\)\s*.*(?:key|token|nonce|salt|iv|secret)|(?:key|token|nonce|salt|iv|secret).*Math\.random\(\)/i, alt: "crypto.getRandomValues()" }, // quantumscan-ignore
   { id: "openssl-old",  name: "OpenSSL < 3.x",            sev: "medium",   re: /OpenSSL\s+1\.[01]\.|libssl\.so\.1\.|openssl-1\.[01]\./i }, // quantumscan-ignore
+  // CRITICAL — Solidity signature replay attacks (engineering flaw, independent of PQC quantum risk)
+  { id: "solidity-ecrecover-raw-pack", name: "ecrecover with raw abi.encodePacked — no EIP-712 domain separator (cross-chain + same-chain replay)", sev: "critical",
+    re: /ecrecover\s*\(\s*keccak256\s*\(\s*abi\.encodePacked\s*\(/i,
+    alt: "Use EIP-712: _hashTypedDataV4({chainId: block.chainid, ...}) — domain separator prevents replay across chains and contracts" }, // quantumscan-ignore
   // BLOCKCHAIN
   { id: "ethers-wallet",       name: "ethers.js Wallet (secp256k1)",       sev: "high", re: /new\s+ethers\.Wallet\s*\(|Wallet\.createRandom\s*\(|Wallet\.fromMnemonic\s*\(|Wallet\.fromPhrase\s*\(/i, alt: "Monitor Ethereum PQC roadmap (EIP-7786)" }, // quantumscan-ignore
   { id: "web3-accounts",       name: "web3.js / viem accounts (secp256k1)",sev: "high", re: /web3\.eth\.accounts\.|accounts\.create\s*\(|privateKeyToAccount\s*\(|createWalletClient\s*\(|generatePrivateKey\s*\(\)/i, alt: "Monitor Ethereum PQC roadmap" }, // quantumscan-ignore
@@ -225,6 +229,13 @@ const PATTERNS = [
   { id: "hardcoded-master-key", name: "Hardcoded master/signing/JWT key literal (not from KMS or env)", sev: "high",
     re: /(?:master_key|root_key|signing_key|hmac_secret|jwt_secret|app_secret)\s*=\s*["'`][A-Za-z0-9+\/=_\-]{16,}["'`]/i,
     alt: "Load from AWS KMS, HashiCorp Vault, or env var (process.env / os.environ)" }, // quantumscan-ignore
+  // HIGH — crypto-agility gaps (algorithm hardcoded, can't hot-swap when Q-Day hits)
+  { id: "hardcoded-algorithm-config", name: "Algorithm name hardcoded in variable — zero crypto-agility for Q-Day migration", sev: "high",
+    re: /(?:algorithm|cipher|crypto_suite|key_type|sig_type|key_algorithm)\s*[=:]\s*["'`](?:RSA|ECDSA|ECDH|secp256k1|P-256|P-384|Ed25519|AES-128|SHA-1|SHA1|MD5)["'`]/i,
+    alt: "Store algorithm name in env var or config — enables hot-swap without code change (NIST IR 8547)" }, // quantumscan-ignore
+  { id: "hardcoded-access-key", name: "API/access key literal in source code (should be env var or KMS)", sev: "high",
+    re: /(?:api_key|access_key|auth_key|client_secret|bearer_token)\s*=\s*["'`][A-Za-z0-9+\/=_\-]{8,}["'`]/i,
+    alt: "Load from process.env / os.environ / AWS KMS / HashiCorp Vault — never hardcode credentials" }, // quantumscan-ignore
   // LOW — informational
   { id: "hardcoded-key",name: "Hardcoded key",            sev: "low",      re: /(?:private_key|secret_key|encryption_key|aes_key|rsa_key)\s*=\s*["'][^"']{16,}["']|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/i }, // quantumscan-ignore
   { id: "crc32",        name: "CRC32 for integrity",      sev: "low",      re: /crc32.*(?:integrity|verify|validate)|(?:integrity|verify|validate).*crc32|CRC32C?\.(?:compute|calculate|verify)/i, alt: "SHA-256 or BLAKE3" }, // quantumscan-ignore

@@ -1,0 +1,56 @@
+name: 'QuantumScan'
+description: 'Post-quantum cryptography (PQC) vulnerability scanner — detect quantum-vulnerable algorithms, weak entropy, and hardcoded keys before Q-Day'
+author: 'quantumscan-io'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Directory to scan (default: repository root)'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Minimum severity that fails the action: critical | high | medium | low | never'
+    required: false
+    default: 'high'
+  substrate:
+    description: 'Enable Substrate/Polkadot PQC patterns (sr25519, BABE, GRANDPA, XCM, ink!, schnorrkel)'
+    required: false
+    default: 'false'
+  no-deps:
+    description: 'Skip dependency manifest scanning (package.json, Cargo.toml, go.mod, requirements.txt…)'
+    required: false
+    default: 'false'
+  sarif-output:
+    description: 'Write SARIF 2.1.0 report to this path — enables GitHub Security tab integration'
+    required: false
+    default: ''
+
+outputs:
+  risk-score:
+    description: 'Quantum risk score 0–100 (0 = quantum-safe, 100 = critical exposure)'
+    value: ${{ steps.scan.outputs.risk-score }}
+  critical:
+    description: 'Number of critical findings'
+    value: ${{ steps.scan.outputs.critical }}
+  high:
+    description: 'Number of high findings'
+    value: ${{ steps.scan.outputs.high }}
+  medium:
+    description: 'Number of medium findings'
+    value: ${{ steps.scan.outputs.medium }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: QuantumScan PQC analysis
+      id: scan
+      shell: bash
+      run: |
+        node "${{ github.action_path }}/action-runner.mjs" \
+          "${{ inputs.path }}" \
+          "${{ inputs.fail-on }}" \
+          "${{ inputs.sarif-output }}" \
+          "${{ inputs.substrate }}" \
+          "${{ inputs.no-deps }}"
