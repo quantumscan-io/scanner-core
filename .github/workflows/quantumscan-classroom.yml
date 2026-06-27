@@ -5,10 +5,8 @@ name: QuantumScan · PQC Audit
 # Students get a PQC risk score on every push — no account required.
 
 on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
+  schedule:
+    - cron: "0 14 * * *"  # once per day at 14:00 UTC — API cost control
 
 permissions:
   contents: read
