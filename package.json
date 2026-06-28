@@ -1,7 +1,7 @@
 {
   "name": "quantumscan",
   "version": "1.9.5",
-  "description": "Post-quantum cryptography scanner — find quantum-vulnerable algorithms in your codebase, Solidity contracts, and Substrate/Polkadot pallets",
+  "description": "Post-quantum cryptography scanner - find quantum-vulnerable algorithms in your codebase, Solidity contracts, and Substrate/Polkadot pallets",
   "keywords": [
     "post-quantum",
     "cryptography",
@@ -50,6 +50,10 @@
   ],
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
   },
   "license": "MIT",
   "homepage": "https://quantumscan.io",
