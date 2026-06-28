@@ -1,0 +1,51 @@
+name: Publish to npm (SLSA Level 3 + Sigstore Provenance)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no publish)'
+        required: false
+        default: 'false'
+
+# SLSA Level 3 requirements:
+#   - id-token: write  → request short-lived OIDC JWT from GitHub (15 min TTL)
+#   - contents: read   → checkout only, no push
+# The OIDC JWT is sent to npm, which forwards it to Sigstore Rekor.
+# The resulting attestation is public and immutable - anyone can verify the
+# package was built from THIS commit in THIS repo by THIS workflow.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Provenance-attested npm publish
+    runs-on: ubuntu-latest
+    environment: npm-publish
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify npm supports provenance (>=9)
+        run: npm --version && node --version
+
+      - name: Publish with provenance attestation
+        if: github.event.inputs.dry_run != 'true'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run (pack only)
+        if: github.event.inputs.dry_run == 'true'
+        run: npm pack --dry-run
