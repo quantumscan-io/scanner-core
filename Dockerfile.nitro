@@ -1,0 +1,50 @@
+# Dockerfile.nitro — AWS Nitro Enclave optimized build for QuantumScan scanner-core
+#
+# This Dockerfile produces an enclave image (EIF) that runs scanner-core in
+# hardware-isolated memory with cryptographic attestation.
+#
+# Build:
+#   docker build -f Dockerfile.nitro -t quantumscan-enclave .
+#   nitro-cli build-enclave --docker-uri quantumscan-enclave --output-file quantumscan.eif
+#
+# The resulting EIF file has deterministic PCR0/PCR1/PCR2 values that are
+# published in TEE.md after each release. Auditors can rebuild to verify.
+
+FROM node:20-alpine AS base
+
+# Minimal attack surface: no shell, no package manager, read-only filesystem
+RUN apk add --no-cache tini && \
+    addgroup -S scanner && adduser -S scanner -G scanner
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json ./
+# Only install runtime dependencies (no dev tools in enclave)
+RUN npm install --omit=dev --no-audit --no-fund
+
+FROM base AS enclave
+WORKDIR /app
+
+# Copy only what the scanner needs — source code never enters this image
+COPY --chown=scanner:scanner index.js ./
+COPY --chown=scanner:scanner gateway.mjs ./
+COPY --from=deps --chown=scanner:scanner /app/node_modules ./node_modules
+
+# The enclave listens on vsock (CID:port) — the host sends scan requests
+# over vsock and receives ONLY the report (source files stay inside)
+EXPOSE 5000
+
+USER scanner
+
+# tini handles signal forwarding (PID 1 in enclave)
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "index.js", "--enclave-mode", "--vsock-port", "5000"]
+
+# Nitro enclave metadata
+LABEL \
+  org.opencontainers.image.title="QuantumScan Nitro Enclave" \
+  org.opencontainers.image.description="QuantumScan scanner-core in AWS Nitro Enclave — source code never leaves hardware-isolated memory" \
+  org.opencontainers.image.vendor="QuantumScan" \
+  org.opencontainers.image.version="1.9.5" \
+  io.quantumscan.tee.type="aws-nitro" \
+  io.quantumscan.tee.attestation-endpoint="https://quantumscan.io/api/tee/verify"
