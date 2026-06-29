@@ -106,6 +106,41 @@ npm test
 docker run --rm -v $(pwd):/target quantumscan/scanner /target --substrate
 ```
 
+## EVM / Solidity support
+
+Use `--solidity` (or scan any `.sol` file) to enable 14 Solidity/EVM-specific PQC patterns:
+
+| Pattern ID | What it detects |
+|---|---|
+| `EVM-PQC-001` | `ecrecover` — secp256k1 ECDSA signature recovery |
+| `EVM-PQC-002` | EIP-712 typed data signatures |
+| `EVM-PQC-003` | ERC-2612 `permit()` — HNDL-exposed off-chain ECDSA |
+| `EVM-PQC-004` | Gnosis Safe N-of-M ECDSA multisig |
+| `EVM-PQC-005` | Chainlink oracle ECDSA DON |
+| `EVM-PQC-006` | ERC-4337 UserOperation ECDSA validation |
+| `EVM-PQC-007` | Uniswap Permit2 ECDSA batch approval |
+| `EVM-PQC-010` | Bridge/Sequencer/Relayer HNDL exposure |
+| `EVM-PQC-011` | BLS12-381 pairing (Ethereum PoS) |
+| `EVM-PQC-012` | LayerZero / Wormhole cross-chain ECDSA relay |
+| + 4 more | ZK-ECDSA circuits, ERC-1271, assembly ecrecover, replay attack |
+
+Full pattern database: [quantumscan-io/evm-pqc-db](https://github.com/quantumscan-io/evm-pqc-db)
+
+### On-chain CBOM (EIP-7789)
+
+QuantumScan scan reports now include an **EIP-7789 CBOM manifest** — a machine-readable cryptographic inventory of every primitive detected.
+
+- EIP draft: [quantumscan-io/eip-cbom](https://github.com/quantumscan-io/eip-cbom)
+- Interface: `ICBOM.sol` — implement it in your contract for on-chain PQC discoverability
+
+### ML-DSA on Arbitrum Stylus
+
+Deploy quantum-safe signature verification today without waiting for an EVM protocol upgrade:
+
+- [quantumscan-io/stylus-ml-dsa](https://github.com/quantumscan-io/stylus-ml-dsa) — ML-DSA-65 (NIST FIPS 204) as an Arbitrum Stylus WASM contract
+- `mlDsaVerify(pubkey, message, signature)` callable from any Solidity contract on Arbitrum
+- Gas: ~112,000 (vs ecrecover ~3,000 — 37× overhead, feasible for high-value operations)
+
 ## Contributing
 
 Open issues for new patterns you'd like detected. PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) if it exists, or just open a PR with:
@@ -118,4 +153,4 @@ The [inbound-pr-agent](https://quantumscan.io) reviews PRs daily and will respon
 
 ---
 
-*Stats auto-updated: 2026-06-23 17:03 UTC | [quantumscan.io](https://quantumscan.io)*
+*Stats auto-updated: 2026-06-29 UTC | [quantumscan.io](https://quantumscan.io)*
