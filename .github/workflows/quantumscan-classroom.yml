@@ -23,25 +23,25 @@ jobs:
         id: submit
         run: |
           REPO="${{ github.repository }}"
-          RESPONSE=$(curl -s -X POST https://quantumscan.io/api/scan \
+          RESPONSE=$(curl -s --max-time 30 -X POST https://quantumscan.io/api/scan \
             -H "Content-Type: application/json" \
-            -d "{\"repoUrl\":\"https://github.com/${REPO}\"}")
+            -d "{\"repoUrl\":\"https://github.com/${REPO}\"}" || echo '{}')
           SCAN_ID=$(echo "$RESPONSE" | grep -o '"scanId":"[^"]*"' | head -1 | cut -d'"' -f4)
           echo "scan_id=${SCAN_ID}" >> "$GITHUB_OUTPUT"
           echo "Scan submitted: ${SCAN_ID}"
 
-      - name: Wait for results (up to 3 minutes)
+      - name: Wait for results (up to 5 minutes)
         id: results
         run: |
           SCAN_ID="${{ steps.submit.outputs.scan_id }}"
           if [ -z "$SCAN_ID" ]; then
             echo "status=error" >> "$GITHUB_OUTPUT"
-            echo "risk_score=0" >> "$GITHUB_OUTPUT"
+            echo "risk_score=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for i in $(seq 1 18); do
+          for i in $(seq 1 30); do
             sleep 10
-            RESULT=$(curl -s "https://quantumscan.io/api/scan/${SCAN_ID}")
+            RESULT=$(curl -s --max-time 15 "https://quantumscan.io/api/scan/${SCAN_ID}" || echo '{}')
             STATUS=$(echo "$RESULT" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
             echo "Attempt $i: status=${STATUS}"
             if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
@@ -56,6 +56,12 @@ jobs:
               break
             fi
           done
+          # Timeout is not a failure — comment will show PENDING status
+          if [ -z "$STATUS" ] || ([ "$STATUS" != "completed" ] && [ "$STATUS" != "failed" ]); then
+            echo "status=timeout" >> "$GITHUB_OUTPUT"
+            echo "risk_score=" >> "$GITHUB_OUTPUT"
+            echo "scan_url=https://quantumscan.io/en/scan/${SCAN_ID}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Comment on PR with results
         if: github.event_name == 'pull_request'
