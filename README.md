@@ -5,6 +5,7 @@
 [![Live Stats](https://img.shields.io/badge/live%20stats-STATS.md-blue)](./STATS.md)
 [![Website](https://img.shields.io/badge/web-quantumscan.io-0ea5e9)](https://quantumscan.io)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/elizaos-plugin-quantumscan)](https://www.npmjs.com/package/elizaos-plugin-quantumscan)
 
 QuantumScan detects classical cryptographic algorithms (RSA, ECDSA, AES-128, SHA-1…) that are vulnerable to quantum computers and maps them to their post-quantum replacements from [NIST FIPS 203/204/205](https://csrc.nist.gov/publications/detail/fips/203/final).
 
@@ -140,6 +141,30 @@ Deploy quantum-safe signature verification today without waiting for an EVM prot
 - [quantumscan-io/stylus-ml-dsa](https://github.com/quantumscan-io/stylus-ml-dsa) — ML-DSA-65 (NIST FIPS 204) as an Arbitrum Stylus WASM contract
 - `mlDsaVerify(pubkey, message, signature)` callable from any Solidity contract on Arbitrum
 - Gas: ~112,000 (vs ecrecover ~3,000 — 37× overhead, feasible for high-value operations)
+
+## AI Agent Integration (ElizaOS)
+
+[![npm](https://img.shields.io/npm/v/elizaos-plugin-quantumscan)](https://www.npmjs.com/package/elizaos-plugin-quantumscan)
+
+Use QuantumScan directly from any [ElizaOS](https://elizaos.ai) agent:
+
+```bash
+npm install elizaos-plugin-quantumscan
+```
+
+```ts
+import { quantumscanPlugin } from "elizaos-plugin-quantumscan";
+
+// Register in your agent character
+character.plugins = [quantumscanPlugin];
+```
+
+Three actions are available to your agent:
+- `SCAN_REPOSITORY` — submit a GitHub/GitLab/Bitbucket repo for PQC analysis
+- `GET_SCAN_RESULT` — retrieve a completed scan by ID
+- `CHECK_PQC_RISK` — instant risk check for a named algorithm (ECDSA, RSA, AES-128…)
+
+Set `QUANTUMSCAN_API_KEY` in your agent env for priority access and more daily scans.
 
 ## Contributing
 
