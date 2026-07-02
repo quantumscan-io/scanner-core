@@ -166,6 +166,36 @@ Three actions are available to your agent:
 
 Set `QUANTUMSCAN_API_KEY` in your agent env for priority access and more daily scans.
 
+## LangChain / LangGraph / CrewAI / AutoGen
+
+[![PyPI](https://img.shields.io/pypi/v/langchain-quantumscan)](https://pypi.org/project/langchain-quantumscan/)
+
+```bash
+pip install langchain-quantumscan
+```
+
+```python
+from langchain_quantumscan import get_quantumscan_tools
+
+tools = get_quantumscan_tools()  # scan_repository, get_scan_result, check_pqc_risk, scan_contract
+agent = create_react_agent(llm, tools)
+```
+
+`ScanContractTool` verifies a smart contract is safe to sign a transaction with — honeypot,
+drainer, rug-pull, and uncapped-mint detection — **before** the agent acts, not after. Also
+works with CrewAI (`QuantumScanCrewTool`) and AutoGen (`AUTOGEN_TOOLS`). No server to run.
+
+## CLI: instant wallet check
+
+```bash
+npx quantumscan-agent-doctor 0xYourAgentWallet
+```
+
+Zero signup. Checks open ERC-20 approvals + ECDSA nonce reuse (a mathematically certain key
+compromise, not a heuristic) against any wallet in one shot. Non-zero exit code on real risk —
+usable as a CI gate before deploying an agent. See
+[quantumscan-io/quantumscan-agent-doctor](https://github.com/quantumscan-io/quantumscan-agent-doctor).
+
 ## Contributing
 
 Open issues for new patterns you'd like detected. PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) if it exists, or just open a PR with:
