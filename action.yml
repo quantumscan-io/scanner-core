@@ -11,9 +11,13 @@ inputs:
     required: false
     default: '.'
   fail-on:
-    description: 'Minimum severity that fails the action: critical | high | medium | low | never'
+    description: >
+      What fails the action. Layer mode (preferred): security | exposure | never.
+      "security" fails only on findings where a reachable primitive controls an
+      identified authority. "exposure" also fails on migration surface.
+      Severity mode (legacy): critical | high | medium | low.
     required: false
-    default: 'high'
+    default: 'security'
   substrate:
     description: 'Enable Substrate/Polkadot PQC patterns (sr25519, BABE, GRANDPA, XCM, ink!, schnorrkel)'
     required: false
@@ -29,16 +33,34 @@ inputs:
 
 outputs:
   risk-score:
-    description: 'Quantum risk score 0–100 (0 = quantum-safe, 100 = critical exposure)'
+    description: 'Risk score 0–100, computed from the security-critical layer only'
     value: ${{ steps.scan.outputs.risk-score }}
+  exposure-score:
+    description: 'Migration surface score 0–100 — planning signal, not a vulnerability count'
+    value: ${{ steps.scan.outputs.exposure-score }}
+  security-critical:
+    description: 'Findings where a reachable primitive controls an identified authority'
+    value: ${{ steps.scan.outputs.security-critical }}
+  migration-exposure:
+    description: 'Findings that must eventually be replaced — not demonstrated vulnerabilities'
+    value: ${{ steps.scan.outputs.migration-exposure }}
+  inventory:
+    description: 'Cryptographic inventory entries — primitive present, no reachable authority established'
+    value: ${{ steps.scan.outputs.inventory }}
+  residual-classical-bypass:
+    description: 'true when post-quantum verification exists but a classical key can still authorize or replace it'
+    value: ${{ steps.scan.outputs.residual-classical-bypass }}
+  migration-status:
+    description: 'inventory-only | pq-capable | hybrid | classical-disabled | end-to-end-blocked'
+    value: ${{ steps.scan.outputs.migration-status }}
   critical:
-    description: 'Number of critical findings'
+    description: 'Number of critical findings (severity computed from context)'
     value: ${{ steps.scan.outputs.critical }}
   high:
-    description: 'Number of high findings'
+    description: 'Number of high findings (severity computed from context)'
     value: ${{ steps.scan.outputs.high }}
   medium:
-    description: 'Number of medium findings'
+    description: 'Number of medium findings (severity computed from context)'
     value: ${{ steps.scan.outputs.medium }}
 
 runs:

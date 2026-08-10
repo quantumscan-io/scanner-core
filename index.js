@@ -2,8 +2,16 @@
 import { execSync } from "child_process";
 import { join, extname, relative, resolve, basename } from "path";
 import { argv, exit } from "process";
+import {
+  FUNCTION, THREAT, PLANE, REACHABILITY, AUTHORITY, LAYER, EVIDENCE,
+  MIGRATION_STATUS, FUNCTION_MAP, REGULATORY,
+  classifyReachability, classifyPlane, classifyAuthority, classifyUpgradeability,
+  classifyLifetime, classifyPkExposure, buildFunctionIndex,
+  assignLayer, assessSeverity, assessEvidence,
+  analyzeRepo, buildSymbolCounts, checkHybridBindings,
+} from "./context.js";
 
-const VERSION = "1.9.5";
+const VERSION = "2.0.0";
 const APP_URL = "https://quantumscan.io";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -40,7 +48,7 @@ const PATTERNS = [
   { id: "rc2",          name: "RC2",                      sev: "critical", re: /\bRC2\b|RC2KeySpec|RC2ParameterSpec/i }, // quantumscan-ignore
   { id: "nullcipher",   name: "NullCipher",               sev: "critical", re: /NullCipher|javax\.crypto\.NullCipher/i }, // quantumscan-ignore
   // HIGH — quantum-vulnerable (Shor's algorithm)
-  { id: "rsa",          name: "RSA",                      sev: "high",     re: /RSA(?:Key(?:Pair)?|PublicKey|PrivateKey|Generator|Encryptor|Decryptor|Signature|CryptoServiceProvider)?(?:\s*\(|\s*\.\s*(?:generate|new|create|load|import))\b|RSACryptoServiceProvider\b|generateRSA|Rsa(?:Private|Public|Key|KeyPairGenerator)|PKCS1_(?:v1_5|OAEP)|import_rsa_key|openssl_pkey_new/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
+  { id: "rsa",          name: "RSA",                      sev: "high",     re: /RSA(?:Key(?:Pair)?|PublicKey|PrivateKey|Generator|Encryptor|Decryptor|Signature|CryptoServiceProvider)?(?:\s*\(|\s*\.\s*(?:generate|new|create|load|import))\b|RSACryptoServiceProvider\b|generateRSA|Rsa(?:Private|Public|Key|KeyPairGenerator)|PKCS1_(?:v1_5|OAEP)|import_rsa_key|openssl_pkey_new/i, alt: "Resolve first: RSA signing → ML-DSA (FIPS 204); RSA key transport → ML-KEM (FIPS 203)" }, // quantumscan-ignore
   { id: "rsa-small",    name: "RSA key ≤2048 bits",       sev: "critical", re: /rsa.*\b(512|768|1024|1536|2048)\b|\bkey(?:_size|Size|Bits)\s*[=:]\s*(512|768|1024|1536|2048)\b|generateKeyPair\s*\(\s*(512|768|1024|1536|2048)/i }, // quantumscan-ignore
   { id: "ecdsa",        name: "ECDSA",                    sev: "high",     re: /\bECDSA\b|ECDsa\.Create\s*\(|ECDSASignature|ecdsa_(?:sign|verify)|ES(?:256|384|512)\b/i, alt: "ML-DSA (CRYSTALS-Dilithium)" }, // quantumscan-ignore
   { id: "ecdh",         name: "ECDH / ECDHE",             sev: "high",     re: /\bECDH\b|\bECDHE\b|ECKeyAgreement|ecdh_(?:generate|compute)|TLS_ECDHE/i, alt: "ML-KEM (CRYSTALS-Kyber)" }, // quantumscan-ignore
@@ -82,11 +90,24 @@ const PATTERNS = [
   { id: "bls12-381",           name: "BLS12-381 pairing curve",           sev: "high", re: /\bbls12[_-]381\b|G1Affine\b|G2Affine\b|G1Projective\b|G2Projective\b|bls\.sign\s*\(|bls\.verify\s*\(|bls\.aggregateVerify\s*\(|pairing\s*\(\s*&?G[12]|from_compressed\s*\(\)|Gt::generator\s*\(/i, alt: "No NIST PQC pairing standard yet — monitor IETF PQC pairings WG" }, // quantumscan-ignore
   { id: "ed25519-dalek-rust",  name: "ed25519-dalek Rust crate usage",    sev: "high", re: /ed25519_dalek::(?:Keypair|SigningKey|VerifyingKey|SecretKey|Signature|ExpandedSecretKey)|SigningKey::from_bytes\s*\(|ExpandedSecretKey::from\s*\(/i, alt: "ML-DSA via pqcrypto-dilithium crate" }, // quantumscan-ignore
   // HIGH — Solidity / DeFi PQC patterns (v1.5.0 — QuantumScan for DeFi)
-  { id: "solidity-eip712",         name: "Solidity EIP-712 typed data sig (secp256k1)",  sev: "high", re: /\b_hashTypedDataV4\s*\(|EIP712\b|DOMAIN_SEPARATOR\b|_DOMAIN_SEPARATOR\b|_buildDomainSeparator\s*\(|eip712Domain\s*\(|hashTypedDataV4\s*\(/i,                                             alt: "Monitor EVM PQC precompile proposals — no quantum-safe EIP-712 standard yet" }, // quantumscan-ignore
+  // EIP-712 defines typed structured-data encoding, hashing and domain separation.
+  // It is NOT a signature algorithm — the quantum exposure belongs to whatever
+  // validator consumes the digest. The encoding layer can be carried into a PQC
+  // design unchanged, bound to a different signature scheme.
+  { id: "solidity-eip712",         name: "EIP-712 signing surface (encoding, not an algorithm)",  sev: "low", re: /\b_hashTypedDataV4\s*\(|EIP712\b|DOMAIN_SEPARATOR\b|_DOMAIN_SEPARATOR\b|_buildDomainSeparator\s*\(|eip712Domain\s*\(|hashTypedDataV4\s*\(/i,                                             alt: "Determine the actual signature validator and authority path — EIP-712 itself is reusable under ML-DSA" }, // quantumscan-ignore
   { id: "solidity-assembly-ecr",   name: "Solidity assembly ecrecover precompile (0x1)", sev: "high", re: /staticcall\s*\([^,)]*,\s*(?:0x0*1|1)\s*,|signer\s*:=\s*mload\s*\(|recovered\s*:=\s*mload\s*\(|let\s+signer\s*:=\s*(?:ecrecover|mload)/i,                                              alt: "Monitor EIP for PQC signature precompile replacement" }, // quantumscan-ignore
   { id: "solidity-oracle-chainlink",name: "Chainlink oracle (secp256k1 ECDSA DON)",     sev: "high", re: /\bAggregatorV3Interface\b|latestRoundData\s*\(|ChainlinkClient\b|buildChainlinkRequest\s*\(|sendChainlinkRequestTo\s*\(|VRFConsumerBase\b|VRFConsumerBaseV2\b|requestRandomness\s*\(/i,  alt: "Monitor Chainlink PQC roadmap — DON uses secp256k1 threshold signatures" }, // quantumscan-ignore
   { id: "solidity-permit-eip2612", name: "ERC-2612 permit() gasless approval (ECDSA)",  sev: "high", re: /\bERC20Permit\b|\bIERC20Permit\b|\bERC2612\b|function\s+permit\s*\(\s*address\s+(?:owner|spender)|\bDAI_DOMAIN_SEPARATOR\b/i,                                                              alt: "No PQC permit standard yet — signature-based approvals will break post-quantum" }, // quantumscan-ignore
-  { id: "solidity-multisig-ecdsa", name: "Gnosis Safe / MultiSig ECDSA (N-of-M keys)", sev: "high", re: /\bGnosisSafe\b|\bMultiSigWallet\b|checkNSignatures\s*\(|execTransaction\s*\(|isValidSignature\s*\(|signatureToAddress\s*\(|_checkSignatures\s*\(|SafeSignature\b|ISafe\b/i,               alt: "Monitor Safe{Wallet} PQC migration — each signer key is Shor-vulnerable" }, // quantumscan-ignore
+  // Safe supports ECDSA, pre-validated and EIP-1271 contract signatures. Detecting
+  // the account is not the same as establishing that every signer is secp256k1 —
+  // resolve the configured signature types before assigning risk.
+  { id: "solidity-multisig-ecdsa", name: "Safe / MultiSig signature check (signature type unresolved)", sev: "medium", re: /\bGnosisSafe\b|\bMultiSigWallet\b|checkNSignatures\s*\(|execTransaction\s*\(|isValidSignature\s*\(|signatureToAddress\s*\(|_checkSignatures\s*\(|SafeSignature\b|ISafe\b/i,               alt: "Resolve each signer's signature type; an EIP-1271 verifier can already validate ML-DSA" }, // quantumscan-ignore
+  // ERC-4337 leaves the meaning of the signature field to the account implementation.
+  // It is both a possible ECDSA location and one of the best migration surfaces.
+  { id: "erc4337-account",         name: "ERC-4337 account validation (validator implementation decides scheme)", sev: "low", re: /\bvalidateUserOp\s*\(|\bPackedUserOperation\b|\bUserOperation\b|\bIEntryPoint\b/,                                                                                                     alt: "Migration surface — a custom validator can verify ML-DSA without an EVM precompile" }, // quantumscan-ignore
+  // EIP-7702 set-code transactions and authorization tuples are still authenticated
+  // with secp256k1 and recovered through ecrecover: the classical root key remains.
+  { id: "eip7702-delegation",      name: "EIP-7702 delegation (classical EOA root key remains)", sev: "medium", re: /EIP[-_]?7702|\bauthorization[Ll]ist\b|\bsetCodeTx\b|\bSetCodeAuthorization\b/i,                                                                                                       alt: "Bootstraps programmable migration logic only — see draft EIP-7851 to disable residual ECDSA authority" }, // quantumscan-ignore
   // HIGH — Java JCA / SSH library false-negative fixes (2026-06-04)
   { id: "java-jca-rsa",        name: "Java JCA RSA getInstance",              sev: "high", re: /(?:KeyPairGenerator|KeyFactory|Cipher|KeyGenerator)\.getInstance\s*\(\s*["']RSA["']/i, alt: "ML-KEM-768 (NIST FIPS 203)" }, // quantumscan-ignore
   { id: "java-jca-sig",        name: "Java JCA RSA/ECDSA Signature",          sev: "high", re: /Signature\.getInstance\s*\(\s*["'][^"']*(?:withRSA|withECDSA|withDSA)[^"']*["']/i, alt: "ML-DSA-65 (NIST FIPS 204)" }, // quantumscan-ignore
@@ -456,7 +477,7 @@ function walkDir(dir, files = []) {
 // ── Scanner ───────────────────────────────────────────────────────────────────
 const IGNORE_MARKER = "quantumscan-ignore";
 
-function scanFile(filePath, rootDir) {
+function scanFile(filePath, rootDir, symbolCounts = null, repo = null) {
   let content;
   try { content = readFileSync(filePath, "utf8"); }
   catch { return []; }
@@ -465,6 +486,8 @@ function scanFile(filePath, rootDir) {
   const lines = content.split("\n");
   const findings = [];
   const relPath = relative(rootDir, filePath).replace(/\\/g, "/");
+  const upgradeability = classifyUpgradeability(content);
+  const fnIndex = buildFunctionIndex(lines);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -481,21 +504,85 @@ function scanFile(filePath, rootDir) {
     for (const p of PATTERNS) {
       if (p.re.test(line)) {
         const m = line.match(p.re);
-        findings.push({
+        findings.push(enrich({
           file: relPath,
           line: i + 1,
           id: p.id,
           name: p.name,
-          sev: p.sev,
+          baseSev: p.sev,
           match: (m?.[0] ?? "").substring(0, 60).trim(),
           alt: p.alt ?? null,
           type: "code",
-        });
+        }, { lines, idx: i, relPath, upgradeability, symbolCounts, repo, fnIndex }));
         break; // one finding per line
       }
     }
   }
   return findings;
+}
+
+// ── Context enrichment ────────────────────────────────────────────────────────
+// A detection becomes a record only after execution context and authority are
+// established. Severity is computed here, last — never read from the pattern.
+
+function enrich(f, { lines, idx, relPath, upgradeability, symbolCounts, repo, fnIndex }) {
+  const mapped = FUNCTION_MAP[f.id] ?? {};
+  const fn     = mapped.fn ?? FUNCTION.UNKNOWN;
+  const threat = mapped.threat ?? THREAT.UNRESOLVED;
+
+  const reachability  = classifyReachability(relPath, lines, idx, symbolCounts);
+  const plane         = classifyPlane(relPath, lines, idx, mapped.plane);
+  const authority     = classifyAuthority(lines, idx, fnIndex);
+  const lifetime      = classifyLifetime(lines, idx, authority);
+  const pkExposure    = classifyPkExposure(fn, plane);
+  const layer         = assignLayer({ fn, threat, reachability, authority });
+
+  const hybridOr = !!repo?.hybridCompositions?.some(
+    h => h.file === relPath && h.composition === "OR"
+  );
+  const residualBypass = !!repo?.residualBypassRisk;
+
+  const sev = assessSeverity(f.baseSev, {
+    layer, reachability, authority, threat, residualBypass, hybridOr,
+  });
+
+  return {
+    ...f,
+    sev,
+    cryptoFunction: fn,
+    threat,
+    plane,
+    reachability,
+    authority,
+    pkExposure,
+    lifetime,
+    upgradeability,
+    layer,
+    residualBypass: residualBypass ? (repo.residualBypasses ?? []).map(b => b.id) : [],
+    migrationStatus: repo?.migrationStatus ?? MIGRATION_STATUS.UNKNOWN,
+    evidence: assessEvidence({ fn, reachability, authority }),
+  };
+}
+
+// A dependency match tells us a package is present, not that a quantum-reachable
+// authority uses it. Those records stay in the inventory layer.
+function enrichDependency(f) {
+  return {
+    ...f,
+    baseSev: f.sev,
+    sev: "low",
+    cryptoFunction: FUNCTION.UNKNOWN,
+    threat: THREAT.MIGRATION_DEBT,
+    plane: PLANE.UNKNOWN,
+    reachability: REACHABILITY.UNKNOWN,
+    authority: AUTHORITY.UNKNOWN,
+    pkExposure: "unknown",
+    lifetime: "unknown",
+    upgradeability: "unknown",
+    layer: LAYER.INVENTORY,
+    residualBypass: [],
+    evidence: EVIDENCE.DETECTED,
+  };
 }
 
 // ── Dependency scanner ────────────────────────────────────────────────────────
@@ -692,20 +779,33 @@ function scanDependencies(rootDir) {
 }
 
 // ── Risk score ────────────────────────────────────────────────────────────────
-const SEV_WEIGHT = { critical: 25, high: 15, medium: 8, low: 3 };
-const SEV_ORDER  = ["critical", "high", "medium", "low"];
-const SEV_ICON   = { critical: "🔴", high: "🟠", medium: "🟡", low: "🔵" };
+const SEV_WEIGHT = { critical: 25, high: 15, medium: 8, low: 3, info: 0 };
+const SEV_ORDER  = ["critical", "high", "medium", "low", "info"];
+const SEV_ICON   = { critical: "🔴", high: "🟠", medium: "🟡", low: "🔵", info: "⚪" };
 
+const byLayer = (findings, layer) => findings.filter(f => f.layer === layer);
+
+/**
+ * Only the security-critical layer feeds the risk score. Inventory and
+ * migration-surface counts are reported separately so a pattern count can never
+ * be mistaken for demonstrated risk.
+ */
 function calcScore(findings) {
-  return Math.min(100, findings.reduce((s, f) => s + (SEV_WEIGHT[f.sev] ?? 5), 0));
+  const sec = byLayer(findings, LAYER.SECURITY);
+  return Math.min(100, sec.reduce((s, f) => s + (SEV_WEIGHT[f.sev] ?? 5), 0));
+}
+
+function calcExposureScore(findings) {
+  const exp = byLayer(findings, LAYER.EXPOSURE);
+  return Math.min(100, exp.reduce((s, f) => s + (SEV_WEIGHT[f.sev] ?? 3), 0));
 }
 
 function riskLabel(score) {
-  if (score === 0)  return `${C.green}Quantum-Safe ✓${C.reset}`;
-  if (score <= 20)  return `${C.green}Low Risk${C.reset}`;
+  if (score === 0)  return `${C.green}No security-critical finding${C.reset}`;
+  if (score <= 20)  return `${C.green}Low${C.reset}`;
   if (score <= 40)  return `${C.yellow}Low-Moderate${C.reset}`;
   if (score <= 60)  return `${C.yellow}Moderate ⚠${C.reset}`;
-  if (score <= 80)  return `${C.orange}High Risk${C.reset}`;
+  if (score <= 80)  return `${C.orange}High${C.reset}`;
   return `${C.red}Critical 🚨${C.reset}`;
 }
 
@@ -714,7 +814,7 @@ function visLen(str) { return str.replace(/\x1b\[[0-9;]*m/g, "").length; }
 function padEnd(str, len) { return str + " ".repeat(Math.max(0, len - visLen(str))); }
 function hr() { return "─".repeat(58); }
 
-function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false) {
+function printResults(findings, totalFiles, scannableCount, targetDir, score, depCount, isCryptoLib, substrateMode = false, repo = null, exposureScore = 0) {
   if (!substrateMode) {
     console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Post-Quantum Cryptography Scanner`);
     console.log(`${C.cyan}${APP_URL}${C.reset}`);
@@ -731,53 +831,45 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
   console.log("");
 
   if (findings.length === 0) {
-    console.log(`${C.green}✓  No cryptographic vulnerabilities detected.${C.reset}`);
-    console.log(`   Your codebase looks quantum-safe based on static patterns.\n`);
+    console.log(`${C.green}✓  No classical cryptographic primitives detected.${C.reset}`);
+    console.log(`   ${C.dim}No inventory entries from static patterns. This is not proof of`);
+    console.log(`   quantum safety — it means nothing matched.${C.reset}\n`);
   } else {
-    const codeFindings = findings.filter(f => f.type !== "dependency");
-    const depFindings  = findings.filter(f => f.type === "dependency");
-
-    if (codeFindings.length > 0) {
-      const grouped = {};
-      for (const sev of SEV_ORDER) grouped[sev] = codeFindings.filter(f => f.sev === sev);
-      for (const sev of SEV_ORDER) {
-        const group = grouped[sev];
-        if (!group.length) continue;
-        console.log(
-          `${sevColor(sev)}${C.bold}${SEV_ICON[sev]} ${sev.toUpperCase().padEnd(9)}${C.reset}` +
-          `${C.gray}${group.length} finding${group.length !== 1 ? "s" : ""}${C.reset}`
-        );
-        for (const f of group.slice(0, 25)) {
-          const loc  = `  ${f.file}:${f.line}`;
-          const name = sevColor(f.sev) + f.name + C.reset;
-          const snip = f.match ? `  ${C.dim}\`${f.match}\`${C.reset}` : "";
-          console.log(`${padEnd(loc, 44)}${padEnd(name, 28)}${snip}`);
-        }
-        if (group.length > 25) console.log(`  ${C.gray}… +${group.length - 25} more${C.reset}`);
-        console.log("");
-      }
-    }
-
-    if (depFindings.length > 0) {
-      console.log(`${C.orange}${C.bold}📦 DEPENDENCIES  ${C.reset}${C.gray}${depFindings.length} vulnerable package(s)${C.reset}`);
-      for (const f of depFindings.slice(0, 20)) {
-        const loc  = `  ${f.file}`;
-        const name = sevColor(f.sev) + f.match + C.reset;
-        const why  = f.reason ? `  ${C.dim}${f.reason}${C.reset}` : "";
-        console.log(`${padEnd(loc, 34)}${padEnd(name, 30)}${why}`);
-        if (f.alt) console.log(`  ${C.gray}  → ${f.alt}${C.reset}`);
-      }
-      if (depFindings.length > 20) console.log(`  ${C.gray}… +${depFindings.length - 20} more${C.reset}`);
-      console.log("");
-    }
+    printLayer(
+      LAYER.SECURITY, findings,
+      "SECURITY-CRITICAL QUANTUM RISK",
+      "An attacker could authorize, forge or decrypt something here.",
+      true,
+    );
+    printLayer(
+      LAYER.EXPOSURE, findings,
+      "PQC MIGRATION EXPOSURE",
+      "Must eventually be replaced. Not a demonstrated vulnerability.",
+      true,
+    );
+    printLayer(
+      LAYER.INVENTORY, findings,
+      "CRYPTOGRAPHIC INVENTORY",
+      "Primitive present. No reachable authority established.",
+      false,
+    );
   }
 
+  if (repo) printRepoAnalysis(repo);
+
   console.log(hr());
-  console.log(`Risk Score  ${C.bold}${score}/100${C.reset}  ${riskLabel(score)}`);
+  const sec = byLayer(findings, LAYER.SECURITY).length;
+  const exp = byLayer(findings, LAYER.EXPOSURE).length;
+  const inv = byLayer(findings, LAYER.INVENTORY).length;
+
+  console.log(`Security-critical  ${C.bold}${sec}${C.reset} finding(s)   ${C.dim}risk score ${score}/100${C.reset}  ${riskLabel(score)}`);
+  console.log(`Migration exposure ${C.bold}${exp}${C.reset} finding(s)   ${C.dim}surface score ${exposureScore}/100${C.reset}`);
+  console.log(`Inventory          ${C.bold}${inv}${C.reset} entr${inv === 1 ? "y" : "ies"}`);
 
   if (findings.length > 0) {
-    console.log(`\n${C.dim}Migrate to: ML-KEM (key encap, FIPS 203) · ML-DSA (signatures, FIPS 204)${C.reset}`); // quantumscan-ignore
-    console.log(`${C.dim}Required by NIST, DORA, NIS2, CNSA 2.0 — deadline 2030.${C.reset}`);
+    console.log(`\n${C.dim}Signatures/authorization → ML-DSA (FIPS 204) or SLH-DSA (FIPS 205).${C.reset}`); // quantumscan-ignore
+    console.log(`${C.dim}Key establishment/confidentiality → ML-KEM (FIPS 203).${C.reset}`); // quantumscan-ignore
+    console.log(`${C.dim}Run ${C.reset}${C.bold}--regulatory${C.reset}${C.dim} for what each framework actually requires.${C.reset}`);
     console.log(`\n${C.cyan}Full AI analysis + migration guides → ${APP_URL}${C.reset}`);
     console.log(`${C.dim}Add ${C.reset}${C.bold}// quantumscan-ignore${C.reset}${C.dim} to suppress a false positive.${C.reset}`);
   }
@@ -785,11 +877,136 @@ function printResults(findings, totalFiles, scannableCount, targetDir, score, de
   console.log("");
 }
 
+const LAYER_ICON = {
+  [LAYER.SECURITY]:  "🚨",
+  [LAYER.EXPOSURE]:  "🔧",
+  [LAYER.INVENTORY]: "📋",
+};
+
+function printLayer(layer, findings, title, subtitle, showDetail) {
+  const group = byLayer(findings, layer);
+  if (!group.length) return;
+
+  const color = layer === LAYER.SECURITY ? C.red : layer === LAYER.EXPOSURE ? C.yellow : C.gray;
+  console.log(`${color}${C.bold}${LAYER_ICON[layer]} ${title}${C.reset}  ${C.gray}${group.length}${C.reset}`);
+  console.log(`${C.dim}   ${subtitle}${C.reset}`);
+
+  if (!showDetail) {
+    // Inventory is a count by primitive — listing every library hit is noise.
+    const byName = new Map();
+    for (const f of group) byName.set(f.name, (byName.get(f.name) ?? 0) + 1);
+    const rows = [...byName.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+    for (const [name, n] of rows) console.log(`   ${C.dim}${padEnd(`${n}×`, 6)}${name}${C.reset}`);
+    if (byName.size > 12) console.log(`   ${C.gray}… +${byName.size - 12} more primitive(s)${C.reset}`);
+    console.log("");
+    return;
+  }
+
+  for (const sev of SEV_ORDER) {
+    const sub = group.filter(f => f.sev === sev);
+    if (!sub.length) continue;
+    for (const f of sub.slice(0, 20)) {
+      const loc = `   ${f.file}:${f.line}`;
+      const nm  = `${sevColor(f.sev)}${SEV_ICON[f.sev]} ${f.name}${C.reset}`;
+      console.log(`${padEnd(loc, 42)}${nm}`);
+      // The context chain is the justification for the severity above.
+      console.log(
+        `${" ".repeat(42)}${C.dim}${f.cryptoFunction} · ${f.plane} · ${f.reachability}` +
+        ` · ${f.authority} · ${f.threat}${C.reset}`
+      );
+      if (f.residualBypass?.length) {
+        console.log(`${" ".repeat(42)}${C.orange}residual classical bypass: ${f.residualBypass.join(", ")}${C.reset}`);
+      }
+      if (f.evidence === EVIDENCE.UNRESOLVED) {
+        console.log(`${" ".repeat(42)}${C.dim}evidence: unresolved — cryptographic purpose or authority not established${C.reset}`);
+      }
+    }
+    if (sub.length > 20) console.log(`   ${C.gray}… +${sub.length - 20} more${C.reset}`);
+  }
+  console.log("");
+}
+
+/**
+ * Repository-level findings the per-line model cannot express: whether PQ
+ * verification exists at all, and whether a classical key can still bypass it.
+ */
+function printRepoAnalysis(repo) {
+  const {
+    pqCapabilities, residualBypasses, migrationComponents,
+    hybridCompositions, settlementDependency, migrationStatus, residualBypassRisk,
+  } = repo;
+
+  console.log(`${C.cyan}${C.bold}🧭 MIGRATION STATE${C.reset}  ${C.gray}${migrationStatus}${C.reset}`);
+
+  if (pqCapabilities.length) {
+    console.log(`   ${C.green}PQ capability${C.reset}   ${pqCapabilities.map(p => p.name).join(", ")}`);
+  } else {
+    console.log(`   ${C.dim}PQ capability   none detected${C.reset}`);
+  }
+
+  if (migrationComponents.length) {
+    console.log(`   ${C.dim}Migration surfaces available: ${migrationComponents.map(c => c.label).join(", ")}${C.reset}`);
+  }
+
+  if (residualBypassRisk) {
+    console.log(`\n   ${C.red}${C.bold}⚠ RESIDUAL CLASSICAL BYPASS${C.reset}`);
+    console.log(`   ${C.dim}Post-quantum verification is present, but a classical key can still`);
+    console.log(`   authorize or replace the validator. The classical root of authority`);
+    console.log(`   remains, so this codebase is not post-quantum authorized.${C.reset}`);
+    for (const b of residualBypasses.slice(0, 8)) {
+      console.log(`     ${C.orange}·${C.reset} ${padEnd(b.label, 34)}${C.dim}${b.files.slice(0, 2).join(", ")}${b.files.length > 2 ? ` +${b.files.length - 2}` : ""}${C.reset}`);
+    }
+  } else if (pqCapabilities.length) {
+    console.log(`   ${C.green}No classical bypass path detected alongside the PQ verifier.${C.reset}`);
+  }
+
+  if (hybridCompositions.length) {
+    console.log(`\n   ${C.bold}Hybrid composition${C.reset}`);
+    for (const h of hybridCompositions.slice(0, 6)) {
+      const warn = h.composition === "OR";
+      const tag = warn ? `${C.red}OR — classical branch still authorizes${C.reset}`
+        : h.composition === "AND" ? `${C.green}AND — secure while either scheme holds${C.reset}`
+        : `${C.yellow}composition unresolved${C.reset}`;
+      console.log(`     ${h.file}:${h.line}  ${tag}`);
+      const missing = checkHybridBindings(h.snippet).filter(b => !b.present);
+      if (missing.length) {
+        console.log(`       ${C.dim}unbound: ${missing.map(m => m.label).join(", ")} — downgrade/replay risk${C.reset}`);
+      }
+    }
+  }
+
+  if (settlementDependency) {
+    console.log(`\n   ${C.dim}Settlement dependency: L2/rollup signals present. Application-level PQ`);
+    console.log(`   authorization cannot claim end-to-end quantum resistance while the`);
+    console.log(`   parent-chain transaction and consensus assumptions remain classical.${C.reset}`);
+  }
+  console.log("");
+}
+
+// ── Regulatory reference ──────────────────────────────────────────────────────
+function printRegulatory() {
+  console.log(`\n${C.bold}Regulatory instruments — what each one actually says${C.reset}`);
+  console.log(hr());
+  for (const r of REGULATORY) {
+    console.log(`\n${C.bold}${r.instrument}${C.reset}`);
+    console.log(`  ${C.dim}Says:${C.reset}    ${r.says}`);
+    console.log(`  ${C.dim}Imposes:${C.reset} ${r.imposes}`);
+    if (r.correction) console.log(`  ${C.orange}Correction:${C.reset} ${r.correction}`);
+  }
+  console.log("");
+}
+
 // ── JSON output ───────────────────────────────────────────────────────────────
-function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib, substrateInfo = null) {
-  const summary = { riskScore: score };
+function printJson(findings, totalFiles, scannableCount, targetDir, score, isCryptoLib, substrateInfo = null, repo = null, exposureScore = 0) {
+  const summary = { riskScore: score, exposureScore };
   for (const sev of SEV_ORDER) summary[sev] = findings.filter(f => f.sev === sev).length;
   summary.dependencies = findings.filter(f => f.type === "dependency").length;
+  summary.byLayer = {
+    securityCritical: byLayer(findings, LAYER.SECURITY).length,
+    migrationExposure: byLayer(findings, LAYER.EXPOSURE).length,
+    inventory: byLayer(findings, LAYER.INVENTORY).length,
+  };
+
   console.log(JSON.stringify({
     version: VERSION,
     path: targetDir,
@@ -797,16 +1014,81 @@ function printJson(findings, totalFiles, scannableCount, targetDir, score, isCry
     coverage: (isCryptoLib || score <= 20)
       ? "partial — crypto library or low score: implementation-level patterns may not be fully covered"
       : "standard",
+    // Severity is derived from context, never read from the pattern table.
+    // `inventory` and `migrationExposure` records are not vulnerabilities.
+    interpretation: {
+      inventory: "primitive detected; no reachable authority established",
+      migrationExposure: "must eventually be replaced; not a demonstrated vulnerability",
+      securityCritical: "reachable primitive controlling identified authority",
+      evidenceNote: "static analysis yields 'detected' and 'derived' only; 'confirmed' requires dynamic or manual verification",
+    },
     ...(substrateInfo ? { substrate: substrateInfo } : {}),
+    ...(repo ? { migration: {
+      status: repo.migrationStatus,
+      pqCapabilities: repo.pqCapabilities.map(p => ({ id: p.id, name: p.name, files: p.files })),
+      migrationComponents: repo.migrationComponents.map(c => ({ id: c.id, label: c.label, files: c.files })),
+      residualBypassRisk: repo.residualBypassRisk,
+      residualBypasses: repo.residualBypasses.map(b => ({ id: b.id, label: b.label, files: b.files })),
+      hybridCompositions: repo.hybridCompositions.map(h => ({
+        file: h.file, line: h.line, composition: h.composition,
+        unboundFields: checkHybridBindings(h.snippet).filter(b => !b.present).map(b => b.id),
+      })),
+      settlementDependency: repo.settlementDependency,
+    } } : {}),
+    regulatory: REGULATORY,
     summary,
     findings: findings.map(f => ({
       file: f.file, line: f.line,
       type: f.type ?? "code",
-      algorithm: f.name, severity: f.sev,
-      match: f.match, pqcAlternative: f.alt,
+      // ── Cryptographic inventory ──
+      primitive: f.name,
+      cryptographicFunction: f.cryptoFunction,
+      match: f.match,
+      // ── Context chain ──
+      executionPlane: f.plane,
+      reachability: f.reachability,
+      authority: f.authority,
+      publicKeyExposure: f.pkExposure,
+      authorityLifetime: f.lifetime,
+      upgradeability: f.upgradeability,
+      residualBypass: f.residualBypass ?? [],
+      // ── Conclusion ──
+      quantumThreat: f.threat,
+      migrationStatus: f.migrationStatus,
+      layer: f.layer,
+      evidenceClass: f.evidence,
+      severity: f.sev,
+      basePriorSeverity: f.baseSev,
+      pqcAlternative: f.alt,
       reason: f.reason ?? undefined,
     })),
   }, null, 2));
+}
+
+// ── Matrix output ─────────────────────────────────────────────────────────────
+function printMatrix(findings) {
+  const cols = [
+    ["LOCATION", f => `${f.file}:${f.line}`, 34],
+    ["PRIMITIVE", f => f.name, 30],
+    ["FUNCTION", f => f.cryptoFunction, 18],
+    ["PLANE", f => f.plane, 20],
+    ["REACH", f => f.reachability, 20],
+    ["AUTHORITY", f => f.authority, 20],
+    ["PK-EXPOSURE", f => f.pkExposure, 20],
+    ["LIFETIME", f => f.lifetime, 12],
+    ["UPGRADE", f => f.upgradeability, 22],
+    ["THREAT", f => f.threat, 26],
+    ["BYPASS", f => (f.residualBypass?.length ? f.residualBypass.join("|") : "—"), 24],
+    ["EVIDENCE", f => f.evidence, 12],
+    ["LAYER", f => f.layer, 18],
+    ["SEVERITY", f => f.sev, 10],
+  ];
+  console.log(cols.map(([h, , w]) => padEnd(h, w)).join(""));
+  console.log("─".repeat(cols.reduce((s, c) => s + c[2], 0)));
+  for (const f of findings) {
+    console.log(cols.map(([, get, w]) => padEnd(String(get(f) ?? "—").slice(0, w - 1), w)).join(""));
+  }
+  console.log("");
 }
 
 // ── SARIF output ──────────────────────────────────────────────────────────────
@@ -816,18 +1098,35 @@ function sevToSarif(sev) {
   return "note";
 }
 
+// Inventory entries must not surface as alerts in a security tab — that is
+// exactly the conflation this model exists to prevent.
+function layerToSarif(f) {
+  if (f.layer === LAYER.INVENTORY) return "none";
+  return sevToSarif(f.sev);
+}
+
 function printSarif(findings, targetDir) {
   // Build rules from unique pattern IDs
   const ruleMap = new Map();
   for (const p of PATTERNS) {
+    const meta = FUNCTION_MAP[p.id] ?? {};
     ruleMap.set(p.id, {
       id: `QS/${p.id}`,
       name: p.name.replace(/[^a-zA-Z0-9]/g, ""),
       shortDescription: { text: p.name },
-      fullDescription: { text: `${p.name} is quantum-vulnerable${p.alt ? `. Migrate to: ${p.alt}` : ""}.` },
+      // A rule describes a detection, not a verdict. Whether an occurrence is a
+      // vulnerability depends on the per-result context chain.
+      fullDescription: { text:
+        `Detects ${p.name}. Cryptographic function: ${meta.fn ?? FUNCTION.UNKNOWN}. ` +
+        `Quantum threat model: ${meta.threat ?? THREAT.UNRESOLVED}. ` +
+        `A match is a cryptographic inventory entry; severity depends on reachability and authority.` +
+        `${p.alt ? ` Next step: ${p.alt}` : ""}` },
       helpUri: `${APP_URL}/why-now`,
-      defaultConfiguration: { level: sevToSarif(p.sev) },
-      properties: { tags: ["security", "pqc", "quantum", p.sev], severity: p.sev },
+      defaultConfiguration: { level: "note" },
+      properties: {
+        tags: ["pqc", "crypto-inventory", meta.fn ?? "unknown", meta.threat ?? "unresolved"],
+        priorSeverity: p.sev,
+      },
     });
   }
   // Add dep rule
@@ -845,11 +1144,27 @@ function printSarif(findings, targetDir) {
     const ruleId = f.type === "dependency" ? "QS/dep" : `QS/${f.id}`;
     const msg = f.type === "dependency"
       ? `${f.match}: ${f.reason}${f.alt ? ` — migrate to: ${f.alt}` : ""}`
-      : `${f.name} detected${f.match ? ` (\`${f.match}\`)` : ""}${f.alt ? `. Migrate to: ${f.alt}` : ""}. Deadline: NIST/DORA/NIS2 2030.`;
+      : `[${f.layer}] ${f.name} — function: ${f.cryptoFunction}; plane: ${f.plane}; ` +
+        `reachability: ${f.reachability}; authority: ${f.authority}; threat: ${f.threat}` +
+        `${f.residualBypass?.length ? `; residual classical bypass: ${f.residualBypass.join(", ")}` : ""}` +
+        `${f.alt ? `. Next step: ${f.alt}` : ""}`;
     return {
       ruleId,
-      level: sevToSarif(f.sev),
+      level: layerToSarif(f),
       message: { text: msg },
+      properties: {
+        layer: f.layer,
+        cryptographicFunction: f.cryptoFunction,
+        executionPlane: f.plane,
+        reachability: f.reachability,
+        authority: f.authority,
+        publicKeyExposure: f.pkExposure,
+        authorityLifetime: f.lifetime,
+        upgradeability: f.upgradeability,
+        quantumThreat: f.threat,
+        evidenceClass: f.evidence,
+        severity: f.sev,
+      },
       locations: [{
         physicalLocation: {
           artifactLocation: { uri: f.file, uriBaseId: "%SRCROOT%" },
@@ -910,6 +1225,13 @@ Usage: npx quantumscan [path] [options]
 
   path               Directory to scan (default: current directory)
 
+Reports (a detection is not a vulnerability — these are three distinct outputs):
+  --inventory        Cryptographic inventory only: what primitive exists
+  --exposure         Migration exposure only: what must eventually be replaced
+  --security         Security-critical only: what an attacker could authorize
+  --matrix           Full context matrix, one row per finding
+  --regulatory       What NIST / EU roadmap / DORA / CNSA 2.0 actually require
+
 Options:
   --json             Output results as JSON (for CI/CD pipelines)
   --sarif            Output results as SARIF 2.1.0 (GitHub Security tab)
@@ -918,6 +1240,7 @@ Options:
   --no-deps          Skip dependency scanning (package.json, requirements.txt…)
   --no-code          Skip source code scanning (only scan dependencies)
   --badge            Print README badge markdown after scan
+  --fail-on-exposure Also fail on migration-surface findings (default: security only)
   --no-fail          Exit 0 even when findings are found (default: exit 1)
   --version          Show version
   --help             Show this help
@@ -935,8 +1258,8 @@ Examples:
   npx quantumscan /path/to/project --json | jq '.summary'
 
 Exit codes:
-  0   No findings (or --no-fail)
-  1   Findings detected
+  0   No security-critical findings (or --no-fail)
+  1   Security-critical findings detected (or exposure, with --fail-on-exposure)
   2   Error (path not found, etc.)
 
 Full cloud analysis with AI migration guides:
@@ -948,14 +1271,24 @@ function main() {
 
   if (args.includes("--help") || args.includes("-h")) { console.log(HELP); exit(0); }
   if (args.includes("--version") || args.includes("-v")) { console.log(VERSION); exit(0); }
+  if (args.includes("--regulatory")) { printRegulatory(); exit(0); }
 
   const jsonMode       = args.includes("--json");
   const sarifMode      = args.includes("--sarif");
+  const matrixMode     = args.includes("--matrix");
   const badgeMode      = args.includes("--badge");
   const substrateMode  = args.includes("--substrate");
   const noDeps         = args.includes("--no-deps");
   const noCode         = args.includes("--no-code");
   const noFail         = args.includes("--no-fail");
+  // Fail the build only on the security-critical layer. Inventory and migration
+  // surface are planning data — breaking CI on them is what turns a pattern
+  // count into a false emergency.
+  const failOn         = args.includes("--fail-on-exposure") ? LAYER.EXPOSURE : LAYER.SECURITY;
+  const layerOnly      = args.includes("--inventory") ? LAYER.INVENTORY
+                       : args.includes("--exposure")  ? LAYER.EXPOSURE
+                       : args.includes("--security")  ? LAYER.SECURITY
+                       : null;
   const pathArg        = args.find(a => !a.startsWith("-")) ?? ".";
 
   // Inject Substrate patterns when --substrate flag is set
@@ -984,16 +1317,42 @@ function main() {
 
   const substrateInfo  = substrateMode ? detectSubstrateWorkspace(targetDir, allFiles) : null;
   const scannableFiles = allFiles.filter(f => SCANNABLE_EXTS.has(extname(f).toLowerCase()));
-  const codeFindings   = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir));
-  const depFindings    = noDeps ? [] : scanDependencies(targetDir);
+
+  // Pass 1 — corpus analysis. Reachability needs to tell a definition apart from
+  // a call site, and the bypass/PQ-capability questions are repository-scoped.
+  // Contents are released after this pass so memory stays flat on large repos.
+  let symbolCounts = null, repo = null;
+  if (!noCode) {
+    const corpus = [];
+    for (const f of scannableFiles) {
+      try {
+        const content = readFileSync(f, "utf8");
+        if (content.length > 500_000) continue;
+        corpus.push({ relPath: relative(targetDir, f).replace(/\\/g, "/"), content });
+      } catch { /* unreadable file — excluded from corpus and from findings */ }
+    }
+    symbolCounts = buildSymbolCounts(corpus);
+    repo = analyzeRepo(corpus);
+  }
+
+  // Pass 2 — pattern matching with the corpus context available.
+  const codeFindings   = noCode ? [] : scannableFiles.flatMap(f => scanFile(f, targetDir, symbolCounts, repo));
+  const depFindings    = noDeps ? [] : scanDependencies(targetDir).map(enrichDependency);
   const allFindings    = [...codeFindings, ...depFindings];
   const score          = calcScore(allFindings);
+  const exposureScore  = calcExposureScore(allFindings);
   const isCryptoLib    = mayBeCryptoLib(targetDir, allFiles);
 
+  const layerFilter = layerOnly
+    ? allFindings.filter(f => f.layer === layerOnly)
+    : allFindings;
+
   if (sarifMode) {
-    printSarif(allFindings, targetDir);
+    printSarif(layerFilter, targetDir);
+  } else if (matrixMode) {
+    printMatrix(layerFilter);
   } else if (jsonMode) {
-    printJson(allFindings, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib, substrateInfo);
+    printJson(layerFilter, allFiles.length, scannableFiles.length, targetDir, score, isCryptoLib, substrateInfo, repo, exposureScore);
   } else {
     if (substrateMode) {
       console.log(`\n${C.bold}QuantumScan v${VERSION}${C.reset}  Substrate/Polkadot PQC Analysis`);
@@ -1009,7 +1368,7 @@ function main() {
       console.log(`Patterns   ${C.gray}19 Substrate-specific PQC patterns active${C.reset}`);
       console.log("");
     }
-    printResults(allFindings, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode);
+    printResults(layerFilter, allFiles.length, scannableFiles.length, targetDir, score, depFindings.length, isCryptoLib, substrateMode, repo, exposureScore);
     if (badgeMode) {
       const slug = detectRepoSlug(targetDir);
       if (slug) printBadge(slug, targetDir);
@@ -1017,7 +1376,10 @@ function main() {
     }
   }
 
-  exit(noFail || allFindings.length === 0 ? 0 : 1);
+  const failing = failOn === LAYER.EXPOSURE
+    ? allFindings.filter(f => f.layer === LAYER.SECURITY || f.layer === LAYER.EXPOSURE)
+    : byLayer(allFindings, LAYER.SECURITY);
+  exit(noFail || failing.length === 0 ? 0 : 1);
 }
 
 main();
