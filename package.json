@@ -1,7 +1,7 @@
 {
   "name": "quantumscan",
-  "version": "1.9.5",
-  "description": "Post-quantum cryptography scanner - find quantum-vulnerable algorithms in your codebase, Solidity contracts, and Substrate/Polkadot pallets",
+  "version": "2.0.0",
+  "description": "Post-quantum cryptography scanner — separates cryptographic inventory, PQC migration exposure and security-critical quantum risk in code, Solidity contracts and Substrate/Polkadot pallets",
   "keywords": [
     "post-quantum",
     "cryptography",
@@ -38,13 +38,14 @@
   ],
   "type": "module",
   "scripts": {
-    "test": "node --test test/substrate-patterns.test.js"
+    "test": "node --test test/substrate-patterns.test.js test/context-model.test.js"
   },
   "bin": {
     "quantumscan": "./index.js"
   },
   "files": [
     "index.js",
+    "context.js",
     "LICENSE",
     "README.md"
   ],
